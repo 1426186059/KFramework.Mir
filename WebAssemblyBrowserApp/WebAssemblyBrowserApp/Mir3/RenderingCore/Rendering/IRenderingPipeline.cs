@@ -35,9 +35,11 @@ namespace Shared.Rendering
 
         IReadOnlyList<Size> GetSupportedResolutions();
 
-        Size MeasureText(string text, MirEngine.Font font);
+        Size MeasureText(string text, System.Drawing.Font font);
 
-        Size MeasureText(string text, MirEngine.Font font, Size proposedSize);
+        Size MeasureText(string text, System.Drawing.Font font, Size proposedSize);
+
+        Size MeasureText(string text, System.Drawing.Font font, Size proposedSize, System.Windows.Forms.TextFormatFlags flags);
 
         float GetHorizontalDpi();
 

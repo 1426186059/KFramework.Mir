@@ -58,9 +58,15 @@ namespace Shared.Rendering
         public IReadOnlyList<Size> GetSupportedResolutions() => Array.Empty<Size>();
         public IReadOnlyList<GraphicsAdapterInfo> GetGraphicsAdapters(string pipelineId) => Array.Empty<GraphicsAdapterInfo>();
 
-        public Size MeasureText(string text, MirEngine.Font font) => CanvasRenderer.MeasureText(text, font.ToCss(), 0);
-        public Size MeasureText(string text, MirEngine.Font font, Size proposedSize)
-            => CanvasRenderer.MeasureText(text, font.ToCss(), proposedSize.Width);
+        public Size MeasureText(string text, System.Drawing.Font font)
+            => CanvasRenderer.MeasureText(text, ToCss(font), 0);
+        public Size MeasureText(string text, System.Drawing.Font font, Size proposedSize)
+            => CanvasRenderer.MeasureText(text, ToCss(font), proposedSize.Width);
+        public Size MeasureText(string text, System.Drawing.Font font, Size proposedSize, System.Windows.Forms.TextFormatFlags flags)
+            => CanvasRenderer.MeasureText(text, ToCss(font), proposedSize.Width);
+
+        private static string ToCss(System.Drawing.Font font)
+            => font == null ? "12px sans-serif" : new MirEngine.Font(font.Name, font.Size).ToCss();
 
         public float GetHorizontalDpi() => 96;
 

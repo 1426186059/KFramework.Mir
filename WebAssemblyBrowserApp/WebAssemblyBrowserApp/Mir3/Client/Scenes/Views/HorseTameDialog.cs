@@ -33,7 +33,7 @@ namespace Client.Scenes.Views
         private Size _progressSize;
         private Point _animationAnchor;
         private int _healthBarWidth;
-        private Timer _promptTimer, _resultTimer;
+        private System.Windows.Forms.Timer _promptTimer, _resultTimer;
         private bool _initialized;
 
         public DXAnimatedControl LassoAnimation;
@@ -50,10 +50,10 @@ namespace Client.Scenes.Views
             PassThrough = true;
             Sort = true;
 
-            _promptTimer = new Timer();
+            _promptTimer = new System.Windows.Forms.Timer();
             _promptTimer.Tick += PromptTimer_Tick;
 
-            _resultTimer = new Timer
+            _resultTimer = new System.Windows.Forms.Timer
             {
                 Interval = ResultDuration,
             };

@@ -18,23 +18,24 @@
     <Compile Remove="Mir3\RenderingCore\Rendering\SharpDXD3D11\**" />
     <Compile Remove="Mir3\RenderingCore\Rendering\SilkD3D11\**" />
     <Compile Remove="Mir3\RenderingCore\Rendering\SilkVulkan\**" />
-    <!-- GDI+ 光照/调色板生成器：仅被上面的硬件管线使用，浏览器用 Canvas 光照重写。 -->
-    <Compile Remove="Mir3\RenderingCore\Rendering\ColourPaletteHelper.cs" />
+    <!-- GDI+ 光照/调色板生成器：LightGenerator 仅被硬件管线使用（浏览器用 Canvas 光照重写）；
+         ColourPaletteHelper 同时被客户端 DXColourControl 引用，必须保留参与编译。 -->
     <Compile Remove="Mir3\RenderingCore\Rendering\LightGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- WinForms / DevExpress UI 层：浏览器无对应物，将由 Canvas 重写。原版文件保留在工程内作移植参考，暂不进编译。 -->
-    <Compile Remove="Mir3\Client\Controls\**" />
-    <Compile Remove="Mir3\Client\Scenes\**" />
-    <Compile Remove="Mir3\Client\Envir\**" />
-    <Compile Remove="Mir3\Client\Models\**" />
-    <Compile Remove="Mir3\Client\UserModels\**" />
-    <Compile Remove="Mir3\Client\Extensions\**" />
+    <!-- 原版客户端游戏层（Controls/Scenes/Envir/Models/UserModels/Extensions）已加回编译。
+         浏览器无 WinForms/GDI+，由 Shims/ 下的兼容壳提供类型，使原版代码能编过；
+         真实交互/显示后续用 Canvas 逐个替换（见 Shims/README）。 -->
+    <!-- 入口文件保留 M1 版本（WinForms 版原版入口不适用浏览器），继续排除。 -->
     <Compile Remove="Mir3\Client\GlobalUsings.cs" />
     <Compile Remove="Mir3\Client\TargetForm.cs" />
     <Compile Remove="Mir3\Client\Program.cs" />
-    <!-- ImageManager：离线 .Zl 打包工具，依赖 System.Drawing.Bitmap / ManagedSquish，浏览器不需要。 -->
+    <!-- ImageManager：离线 .Zl 打包工具，依赖原生 ManagedSquish / System.Drawing.Bitmap，浏览器不需要，保持排除。 -->
     <Compile Remove="Mir3\ImageManager\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
 </Project>
