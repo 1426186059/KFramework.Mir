@@ -115,6 +115,7 @@ namespace MirDB
         {
             Assemblies = assemblies;
             Stopwatch dbSw = Stopwatch.StartNew();
+            Stopwatch phaseSw = new Stopwatch();
 
             if (DatabaseBytesLoader == null)
             {
@@ -140,19 +141,28 @@ namespace MirDB
 
             PrintTool.Write("DB", $"InitializeIncremental: 发现 {Collections.Count} 张表, 来自 {assemblies.Length} 个程序集");
 
+            phaseSw.Restart();
             foreach (ADBCollection c in InitializeSystemIncremental())
                 yield return c;
+            PrintTool.Write("DB", $"阶段[系统表加载] 耗时 {phaseSw.ElapsedMilliseconds}ms");
 
+            phaseSw.Restart();
             if ((Mode & SessionMode.Users) == SessionMode.Users)
                 foreach (ADBCollection c in InitializeUsersIncremental())
                     yield return c;
+            PrintTool.Write("DB", $"阶段[用户表加载] 耗时 {phaseSw.ElapsedMilliseconds}ms");
 
-            Parallel.ForEach(Relationships, x => x.Value.ConsumeKeys(this));
+            phaseSw.Restart();
+            foreach (KeyValuePair<Type, DBRelationship> rel in Relationships)
+                rel.Value.ConsumeKeys(this);
+            PrintTool.Write("DB", $"阶段[ConsumeKeys] 耗时 {phaseSw.ElapsedMilliseconds}ms");
 
             Relationships = null;
 
+            phaseSw.Restart();
             foreach (KeyValuePair<Type, ADBCollection> pair in Collections)
                 pair.Value.OnLoaded();
+            PrintTool.Write("DB", $"阶段[OnLoaded] 耗时 {phaseSw.ElapsedMilliseconds}ms");
 
             bool migrationPending = Collections.Values.Any(x => !x.ReadOnly && x.HasMigrations() &&
                 (x.IsSystemData ? (Mode & SessionMode.System) == SessionMode.System : (Mode & SessionMode.Users) == SessionMode.Users));

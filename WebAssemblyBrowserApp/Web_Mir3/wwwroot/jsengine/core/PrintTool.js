@@ -13,7 +13,7 @@ export const Write = (tagOrMsg, maybeMsg) => {
     const message = maybeMsg === undefined ? tagOrMsg : maybeMsg;
     const d = new Date();
     const time = `${pad2(d.getHours())}/${pad2(d.getMinutes())}/${pad2(d.getSeconds())}`;
-    console.log(`[JS][${tag}] ${time}, ${message}`);
+    console.log(`${time} [JS][${tag}], ${message}`);
 };
 
 // 供 C# 侧 [JSImport("mir.log")] 绑定（BrowserResource.Log -> 404 等）。
