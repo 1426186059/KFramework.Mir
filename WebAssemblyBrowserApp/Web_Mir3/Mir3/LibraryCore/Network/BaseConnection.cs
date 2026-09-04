@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Net.Sockets;
 using System.Reflection;
 using G = Library.Network.GeneralPackets;
 
@@ -23,7 +22,7 @@ namespace Library.Network
 
         public bool AdditionalLogging;
 
-        protected TcpClient Client;
+        protected INetworkTransport Transport;
 
         public DateTime TimeConnected { get; set; }
         public TimeSpan Duration => Time.Now - TimeConnected;
@@ -46,13 +45,13 @@ namespace Library.Network
         public ConcurrentQueue<Packet> ReceiveList = new ConcurrentQueue<Packet>();
         public ConcurrentQueue<Packet> SendList = new ConcurrentQueue<Packet>();
         private byte[] _rawData = new byte[0];
+        private readonly byte[] _recvBuf = new byte[1 << 16]; // 64KB 接收缓冲
 
         public EventHandler<Exception> OnException;
 
-        protected BaseConnection(TcpClient client)
+        protected BaseConnection(INetworkTransport transport)
         {
-            Client = client;
-            Client.NoDelay = true;
+            Transport = transport;
 
             Connected = true;
             TimeConnected = Time.Now;
@@ -60,15 +59,33 @@ namespace Library.Network
             TotalPacketsProcessed = 0;
         }
 
-        protected void BeginReceive()
+        /// <summary>
+        /// 每帧轮询取出 JS/后台线程入队的字节，拼接到 _rawData 并解析出完整 Packet。
+        /// 取代原基于 TcpClient.Socket 的 BeginReceive/EndReceive 异步回调。
+        /// </summary>
+        private void PumpReceive()
         {
             try
             {
-                if (Client == null || !Client.Connected) return;
+                int dataRead;
+                while ((dataRead = Transport.Receive(_recvBuf)) > 0)
+                {
+                    TotalBytesReceived += dataRead;
 
-                byte[] rawBytes = new byte[8 * 1024];
+                    UpdateTimeOut();
 
-                Client.Client.BeginReceive(rawBytes, 0, rawBytes.Length, SocketFlags.None, ReceiveData, rawBytes);
+                    byte[] temp = _rawData;
+                    _rawData = new byte[dataRead + temp.Length];
+                    Buffer.BlockCopy(temp, 0, _rawData, 0, temp.Length);
+                    Buffer.BlockCopy(_recvBuf, 0, _rawData, temp.Length, dataRead);
+
+                    Packet p;
+                    while ((p = Packet.ReceivePacket(_rawData, out _rawData)) != null)
+                    {
+                        ReceiveList.Enqueue(p);
+                        TotalPacketsProcessed++;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -77,49 +94,9 @@ namespace Library.Network
                 Disconnecting = true;
             }
         }
-        private void ReceiveData(IAsyncResult result)
-        {
-            try
-            {
-                if (!Connected) return;
 
-                int dataRead = Client.Client.EndReceive(result);
-
-                if (dataRead == 0)
-                {
-                    Disconnecting = true;
-                    return;
-                }
-
-                TotalBytesReceived += dataRead;
-
-                UpdateTimeOut();
-
-                byte[] rawBytes = result.AsyncState as byte[];
-
-                byte[] temp = _rawData;
-                _rawData = new byte[dataRead + temp.Length];
-                Buffer.BlockCopy(temp, 0, _rawData, 0, temp.Length);
-                Buffer.BlockCopy(rawBytes, 0, _rawData, temp.Length, dataRead);
-
-                Packet p;
-
-                while ((p = Packet.ReceivePacket(_rawData, out _rawData)) != null)
-                {
-                    ReceiveList.Enqueue(p);
-                    TotalPacketsProcessed++;
-                }
-
-                BeginReceive();
-            }
-            catch (Exception ex)
-            {
-                if (AdditionalLogging)
-                    OnException(this, ex);
-                Disconnecting = true;
-            }
-        }
-        private void BeginSend(List<byte> data)
+        /// <summary>把待发送队列一次性写入传输层（同步语义，内部负责 WS 二进制帧）。</summary>
+        private void PumpSend(List<byte> data)
         {
             if (!Connected || data.Count == 0) return;
 
@@ -127,7 +104,8 @@ namespace Library.Network
             {
                 Sending = true;
                 TotalBytesSent += data.Count;
-                Client.Client.BeginSend(data.ToArray(), 0, data.Count, SocketFlags.None, SendData, null);
+                Transport.Send(data.ToArray(), 0, data.Count);
+                Sending = false;
                 UpdateTimeOut();
             }
             catch (Exception ex)
@@ -138,21 +116,7 @@ namespace Library.Network
                 Sending = false;
             }
         }
-        private void SendData(IAsyncResult result)
-        {
-            try
-            {
-                Sending = false;
-                Client.Client.EndSend(result);
-                UpdateTimeOut();
-            }
-            catch (Exception ex)
-            {
-                if (AdditionalLogging)
-                    OnException(this, ex);
-                Disconnecting = true;
-            }
-        }
+
         public virtual void Enqueue(Packet p)
         {
             if (!Connected || p == null) return;
@@ -172,8 +136,8 @@ namespace Library.Network
             ReceiveList = null;
             _rawData = null;
 
-            Client.Client.Dispose();
-            Client = null;
+            Transport?.Disconnect();
+            Transport = null;
         }
 
         public abstract void TrySendDisconnect(Packet p);
@@ -192,6 +156,7 @@ namespace Library.Network
 
             BeginSendDisconnect(data);
         }
+
         private void BeginSendDisconnect(List<byte> data)
         {
             if (!Connected || data.Count == 0) return;
@@ -203,20 +168,7 @@ namespace Library.Network
                 Disconnecting = true;
 
                 TotalBytesSent += data.Count;
-                Client.Client.BeginSend(data.ToArray(), 0, data.Count, SocketFlags.None, SendDataDisconnect, null);
-            }
-            catch (Exception ex)
-            {
-                if (AdditionalLogging)
-                    OnException(this, ex);
-            }
-        }
-        private void SendDataDisconnect(IAsyncResult result)
-        {
-
-            try
-            {
-                Client.Client.EndSend(result);
+                Transport.Send(data.ToArray(), 0, data.Count);
             }
             catch (Exception ex)
             {
@@ -227,11 +179,13 @@ namespace Library.Network
 
         public virtual void Process()
         {
-            if (Client == null || !Client.Connected)
+            if (Transport == null || !Transport.IsConnected)
             {
                 TryDisconnect();
                 return;
             }
+
+            PumpReceive();
 
             while (!ReceiveList.IsEmpty && !Disconnecting)
             {
@@ -307,7 +261,7 @@ namespace Library.Network
                     value.LargestSize = p.Length;
             }
 
-            BeginSend(data);
+            PumpSend(data);
         }
 
         private void ProcessPacket(Packet p)

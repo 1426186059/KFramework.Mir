@@ -1,5 +1,6 @@
 ﻿using Shared.Rendering;
 using Library;
+using Library.Network;
 using System;
 using System.Drawing;
 
@@ -18,6 +19,8 @@ namespace Client.Envir
         public static string IPAddress { get; set; } = DefaultIPAddress;
         public static int Port { get; set; } = DefaultPort;
         public static TimeSpan TimeOutDuration { get; set; } = TimeSpan.FromSeconds(15);
+        /// <summary>WebSocket 传输模式：Auto（浏览器→JS / 非浏览器→Managed）、JsWebSocket（手写 JS）、ManagedWebSocket（C# 自带）。</summary>
+        public static NetworkMode NetworkMode { get; set; } = NetworkMode.Auto;
 
         [ConfigSection("Audit")]
         public static bool SentryEnabled { get; set; } = false;

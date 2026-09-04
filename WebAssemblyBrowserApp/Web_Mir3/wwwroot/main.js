@@ -7,6 +7,7 @@ import * as keyboard from './jsengine/core/keyboard.js';
 import * as mouse from './jsengine/core/mouse.js';
 import * as audio from './jsengine/core/audio.js';
 import * as resource from './jsengine/core/resource.js';
+import * as websocket from './jsengine/core/websocket.js';
 import * as canvas2d from './jsengine/render/canvas/canvas2d.js';
 import * as canvasEngine from './jsengine/render/canvas/canvas-engine.js';
 
@@ -20,6 +21,7 @@ const mir = {
     ...mouse,
     ...audio,
     ...resource,
+    ...websocket,
     ...canvas2d,
     ...canvasEngine,
 };

@@ -6,9 +6,10 @@ using Client.UserModels;
 using Library;
 using System;
 using System.Drawing;
-using System.Net.Sockets;
 using System.Threading;
 using System.Windows.Forms;
+using Client.Network;
+using Library.Network;
 using C = Library.Network.ClientPackets;
 
 //Cleaned
@@ -99,8 +100,11 @@ namespace Client.Scenes
 
         public DXImageControl Logo, LogoBackground;
 
-        private TcpClient ConnectingClient;
+        private INetworkTransport ConnectingTransport;
         private DateTime ConnectionTime;
+        // 浏览器 WASM 不支持 System.Net.Sockets：一旦探测到（无服务器、客户端离线模式），
+        // 停止重试连接，避免每帧抛 PlatformNotSupportedException 拖垮运行时。
+        private bool _networkDisabled;
 
         #endregion
 
@@ -307,10 +311,10 @@ namespace Client.Scenes
 
             if (CEnvir.WrongVersion)
             {
-                if (ConnectingClient != null)
+                if (ConnectingTransport != null)
                 {
-                    ConnectingClient.Close();
-                    ConnectingClient = null;
+                    ConnectingTransport.Disconnect();
+                    ConnectingTransport = null;
                 }
 
                 if (ConnectionBox == null) return;
@@ -335,16 +339,43 @@ namespace Client.Scenes
             }
 
             if (CEnvir.Now < ConnectionTime) return;
+            if (_networkDisabled) return;
 
-            ConnectingClient?.Close();
-            ConnectingClient = new TcpClient();
-            if (Config.UseNetworkConfig)
-                ConnectingClient.BeginConnect(Config.IPAddress, Config.Port, Connecting, ConnectingClient);
-            else
-                ConnectingClient.BeginConnect(Config.DefaultIPAddress, Config.DefaultPort, Connecting, ConnectingClient);
+            try
+            {
+                if (ConnectingTransport == null)
+                {
+                    // 创建传输层（Auto 模式在浏览器下自动选 JS WebSocket，否则选 C# ClientWebSocket）
+                    // 并异步发起连接；连接结果在下方每帧轮询 State/IsConnected 获得。
+                    ConnectingTransport = ClientNetworkFactory.Create();
+                    ConnectingTransport.Connect(ClientNetworkFactory.ResolveHost(), ClientNetworkFactory.ResolvePort());
 
-            ConnectionTime = CEnvir.Now.AddSeconds(5);
-            ConnectionAttempt++;
+                    ConnectionTime = CEnvir.Now.AddSeconds(5); // 连接超时
+                    ConnectionAttempt++;
+                }
+                else if (ConnectingTransport.IsConnected)
+                {
+                    // 连接已建立：握手还需额外 5 秒容错
+                    ConnectionTime = CEnvir.Now.AddSeconds(5);
+                    INetworkTransport transport = ConnectingTransport;
+                    ConnectingTransport = null;
+
+                    CEnvir.Connection = new CConnection(transport);
+                }
+                else if (CEnvir.Now >= ConnectionTime)
+                {
+                    // 连接超时：销毁并在下一帧重建重试
+                    ConnectingTransport.Disconnect();
+                    ConnectingTransport = null;
+                }
+            }
+            catch (PlatformNotSupportedException)
+            {
+                // 浏览器 WASM 不支持所选传输（如误选 ManagedWebSocket）：
+                // 停止重试，避免每帧抛异常拖垮运行时。
+                _networkDisabled = true;
+                ConnectionTime = DateTime.MaxValue;
+            }
         }
 
         public override void OnKeyDown(KeyEventArgs e)
@@ -368,30 +399,6 @@ namespace Client.Scenes
 
                 e.Handled = true;
             }
-        }
-
-        private void Connecting(IAsyncResult result)
-        {
-            try
-            {
-                TcpClient client = (TcpClient)result.AsyncState;
-                client.EndConnect(result);
-
-                if (!client.Connected) return;
-
-                if (client != ConnectingClient)
-                {
-                    ConnectingClient = null;
-                    client.Close();
-                    return;
-                }
-
-                ConnectionTime = CEnvir.Now.AddSeconds(5); //Add 5 more seconds to timeout for delayed HandShake
-                ConnectingClient = null;
-
-                CEnvir.Connection = new CConnection(client);
-            }
-            catch { }
         }
 
         public void LoadDatabase()
@@ -493,7 +500,8 @@ namespace Client.Scenes
         {
             _ConnectionAttempt = 0;
             ConnectionTime = DateTime.MinValue;
-            ConnectingClient = null;
+            ConnectingTransport?.Disconnect();
+            ConnectingTransport = null;
 
 
             if (LoginBox != null) LoginBox.LoginAttempted = false;
@@ -620,7 +628,8 @@ namespace Client.Scenes
                     LogoBackground = null;
                 }
 
-                ConnectingClient = null;
+                ConnectingTransport?.Disconnect();
+            ConnectingTransport = null;
                 _ConnectionAttempt = 0;
                 ConnectionTime = DateTime.MinValue;
 

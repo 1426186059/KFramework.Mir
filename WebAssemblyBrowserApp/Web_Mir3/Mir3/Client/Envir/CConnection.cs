@@ -11,7 +11,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Windows.Forms;
 using C = Library.Network.ClientPackets;
@@ -28,16 +27,14 @@ namespace Client.Envir
 
         public int Ping;
 
-        public CConnection(TcpClient client)
-            : base(client)
+        public CConnection(INetworkTransport transport)
+            : base(transport)
         {
             OnException += (o, e) => CEnvir.SaveException(e);
 
             UpdateTimeOut();
 
             AdditionalLogging = true;
-
-            BeginReceive();
         }
 
         public override void TryDisconnect()
