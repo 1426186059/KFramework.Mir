@@ -80,6 +80,9 @@ namespace Shared.Rendering
                 byte[] data = GetBytesFromUrl?.Invoke(FileName);
                 if (data == null || data.Length == 0)
                 {
+                    // 资源缺失（404/未部署）：按设计容错跳过，标记为已加载但空，
+                    // 避免 CheckImage 访问 Images.Length 时空引用崩溃。
+                    Images = Array.Empty<MirImage>();
                     Loaded = true;
                     return;
                 }
@@ -89,6 +92,7 @@ namespace Shared.Rendering
 
             if (_BReader == null)
             {
+                Images = Array.Empty<MirImage>();
                 Loaded = true;
                 return;
             }
@@ -435,7 +439,7 @@ namespace Shared.Rendering
             while (!Loaded)
                 Thread.Sleep(1);
 
-            return index >= 0 && index < Images.Length && Images[index] != null;
+            return Images != null && index >= 0 && index < Images.Length && Images[index] != null;
         }
 
         private byte[] ReadCompressedPayload(int entryId)

@@ -41,16 +41,22 @@ export const toCss = (argb) => {
 };
 
 // 同步按需拉取 URL 字节（XMLHttpRequest 同步模式），带缓存。
+// 注意：同步 XHR 不允许 responseType='arraybuffer'（会抛 InvalidAccessError），
+// 故改用 x-user-defined 文本编码逐字节还原二进制，这是同步取二进制的可靠方式。
 export function fetchBytes(url) {
     const cached = host.assets.get(url);
     if (cached) return cached;
     try {
         const xhr = new XMLHttpRequest();
         xhr.open('GET', url.replace(/ /g, '%20'), false);
-        xhr.responseType = 'arraybuffer';
+        xhr.overrideMimeType('text/plain; charset=x-user-defined');
         xhr.send();
         if (xhr.status !== 200) return null;
-        const data = new Uint8Array(xhr.response);
+        const text = xhr.responseText;
+        const len = text.length;
+        const data = new Uint8Array(len);
+        for (let i = 0; i < len; i++)
+            data[i] = text.charCodeAt(i) & 0xFF;
         host.assets.set(url, data);
         return data;
     } catch (e) { return null; }
