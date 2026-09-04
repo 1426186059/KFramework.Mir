@@ -11,6 +11,14 @@ public enum ZlCodec : byte
     Png,
 }
 
+/// <summary>ZL2 容器外层压缩方式（对应 Zircon 的 ZlContainerCompression）。</summary>
+public enum ZlContainerCompression : byte
+{
+    None,
+    DeflateFast,
+    DeflateBest,
+}
+
 /// <summary>
 /// 原版 Mir3 .Zl 资源库中的一张图（索引条目）。
 /// 与 Zircon 的 ZlImageMetadata 二进制兼容，但不依赖 System.Drawing / 原生纹理。
@@ -33,6 +41,12 @@ public sealed class ZlImage
 
     public ZlCodec Codec;
     public int StoredDataSize;
+
+    /// <summary>外层压缩方式（ZL2 容器）。旧格式恒为 None。</summary>
+    public ZlContainerCompression Compression;
+
+    /// <summary>从文件读取的 payload 字节数（压缩时为 CompressedSize）。</summary>
+    public int PayloadSize;
 
     public bool HasShadow => ShadowWidth > 0 && ShadowHeight > 0;
     public bool IsDxt => Codec is ZlCodec.Dxt1 or ZlCodec.Dxt5;
@@ -68,6 +82,14 @@ public sealed class ZlLibrary
     public int ValidCount { get; private set; }
 
     public static ZlLibrary ReadIndex(ReadOnlySpan<byte> fileHeader)
+    {
+        // 新格式：ZL2 容器（version>=2），图片为 PNG/BC7 等且可能压缩。
+        if (fileHeader.Length >= 3 && fileHeader[0] == (byte)'Z' && fileHeader[1] == (byte)'L' && fileHeader[2] == (byte)'2')
+            return ReadIndexZL2(fileHeader);
+        return ReadIndexLegacy(fileHeader);
+    }
+
+    private static ZlLibrary ReadIndexLegacy(ReadOnlySpan<byte> fileHeader)
     {
         ZlLibrary lib = new();
         if (fileHeader.Length < 4)
@@ -133,6 +155,9 @@ public sealed class ZlLibrary
                 img.Codec = version == 0 ? ZlCodec.Dxt1 : ZlCodec.Dxt5;
             }
 
+            img.Compression = ZlContainerCompression.None;
+            img.PayloadSize = img.DataSize;
+
             lib.Images[i] = img;
             lib.ValidCount++;
         }
@@ -140,22 +165,153 @@ public sealed class ZlLibrary
         return lib;
     }
 
-    /// <summary>解码主图层，返回 RGBA32。payload 需从 Position 起、至少 DataSize 长。</summary>
+    /// <summary>
+    /// 解析 ZL2 新格式容器（对应 Zircon 的 TryReadCompressedContainer）。
+    /// 以 metadata 为主构建 Images（按 metadata 索引，含 Width/Height/OffSet），
+    /// 用 index 的 Zl2Entry 按"数据偏移"补全外层压缩方式与压缩后大小。
+    /// </summary>
+    private static ZlLibrary ReadIndexZL2(ReadOnlySpan<byte> fileHeader)
+    {
+        ZlLibrary lib = new();
+        byte[] all = fileHeader.ToArray();
+        using var ms = new MemoryStream(all, writable: false);
+        using var r = new BinaryReader(ms);
+
+        r.ReadBytes(3); // "ZL2" 签名
+        int version = r.ReadInt32();
+        int imageCount = r.ReadInt32();
+        int atlasCount = r.ReadInt32();
+        r.ReadByte();   // 默认压缩
+        r.ReadByte();   // flags
+        r.ReadInt16();  // reserved
+        long metaOffset = r.ReadInt64();
+        int metaSize = r.ReadInt32();
+        long idxOffset = r.ReadInt64();
+        int idxSize = r.ReadInt32();
+
+        // index -> 按 Id 定位真实数据偏移与压缩信息（新格式中 metadata.Position 实为 Zl2Entry.Id）
+        var byId = new Dictionary<int, (long offset, ZlContainerCompression comp, int compSize)>();
+        r.BaseStream.Seek(idxOffset, SeekOrigin.Begin);
+        byte[] idx = r.ReadBytes(idxSize);
+        using (var ir = new BinaryReader(new MemoryStream(idx, writable: false)))
+        {
+            int entryCount = ir.ReadInt32();
+            for (int i = 0; i < entryCount; i++)
+            {
+                byte type = ir.ReadByte();
+                int id = ir.ReadInt32();
+                int uncomp = ir.ReadInt32();
+                int comp = ir.ReadInt32();
+                long off = ir.ReadInt64();
+                byte compression = ir.ReadByte();
+                byte codec = ir.ReadByte();
+                if (type == 1 && !byId.ContainsKey(id))
+                    byId[id] = (off, (ZlContainerCompression)compression, comp);
+            }
+        }
+
+        // metadata -> Images（按 metadata 索引）
+        r.BaseStream.Seek(metaOffset, SeekOrigin.Begin);
+        byte[] meta = r.ReadBytes(metaSize);
+        using (var mr = new BinaryReader(new MemoryStream(meta, writable: false)))
+        {
+            int mver = mr.ReadInt32();
+            int mcount = mr.ReadInt32();
+            mr.ReadInt32(); // atlasGroupImageCount
+            mr.ReadInt32(); // atlasPageSize
+            lib.Version = mver;
+            lib.Images = new ZlImage[mcount];
+
+            for (int i = 0; i < mcount; i++)
+            {
+                if (!mr.ReadBoolean()) continue;
+
+                int pos = mr.ReadInt32();
+                short w = mr.ReadInt16();
+                short h = mr.ReadInt16();
+                short ox = mr.ReadInt16();
+                short oy = mr.ReadInt16();
+                mr.ReadByte(); // shadowType
+                mr.ReadInt16(); mr.ReadInt16(); // shadow w,h
+                mr.ReadInt16(); mr.ReadInt16(); // shadow ox,oy
+                mr.ReadInt16(); mr.ReadInt16(); // overlay w,h
+
+                ZlCodec codec = ZlCodec.Dxt1;
+                int stored = 0;
+                if (mver >= 2)
+                {
+                    mr.ReadInt32(); // atlasPage
+                    mr.ReadBytes(8); // sourceRect
+                    mr.ReadBytes(8); // visibleBounds
+                    codec = (ZlCodec)mr.ReadByte();
+                    mr.ReadBytes(2); // shadowCodec, overlayCodec
+                    mr.ReadBytes(3); // runtime preference
+                    stored = mr.ReadInt32();   // StoredImageDataSize
+                    mr.ReadBytes(32);          // 其余 8 个 i32（BC7/Fallback/Shadow/Overlay 尺寸字段）
+                }
+
+                byId.TryGetValue(pos, out var e);
+                ZlImage img = new ZlImage
+                {
+                    Index = i,
+                    Position = e.offset > 0 ? (int)e.offset : pos,
+                    Width = w,
+                    Height = h,
+                    OffSetX = ox,
+                    OffSetY = oy,
+                    Codec = codec,
+                    Compression = e.comp,
+                    PayloadSize = e.compSize > 0 ? e.compSize : (stored > 0 ? stored : ZlImage.ComputeSize(w, h, codec)),
+                };
+                lib.Images[i] = img;
+                lib.ValidCount++;
+            }
+        }
+
+        return lib;
+    }
+
+    /// <summary>解码主图层，返回 RGBA32。payload 需从 Position 起、至少 PayloadSize 长。</summary>
     public byte[]? DecodeImage(ZlImage image, ReadOnlySpan<byte> payload)
     {
-        int size = image.DataSize;
-        if (image.Width <= 0 || image.Height <= 0 || size <= 0 || payload.Length < size)
+        if (image.PayloadSize <= 0 || payload.Length < image.PayloadSize)
             return null;
 
-        ReadOnlySpan<byte> slice = payload.Slice(0, size);
+        ReadOnlySpan<byte> src = payload.Slice(0, image.PayloadSize);
 
-        return image.Codec switch
+        byte[] uncompressed;
+        if (image.Compression != ZlContainerCompression.None)
         {
-            ZlCodec.Dxt1 => DxtDecoder.Decode(slice, image.Width, image.Height, dxt1: true),
-            ZlCodec.Dxt5 => DxtDecoder.Decode(slice, image.Width, image.Height, dxt1: false),
-            ZlCodec.Bgra32 => BgraToRgba(slice),
-            _ => null,
-        };
+            byte[]? inflated = PngDecoder.InflateDeflate(src);
+            if (inflated == null) return null;
+            uncompressed = inflated;
+        }
+        else
+        {
+            uncompressed = src.ToArray();
+        }
+
+        switch (image.Codec)
+        {
+            case ZlCodec.Dxt1:
+                if (image.Width <= 0 || image.Height <= 0) return null;
+                return DxtDecoder.Decode(uncompressed, image.Width, image.Height, dxt1: true);
+            case ZlCodec.Dxt5:
+                if (image.Width <= 0 || image.Height <= 0) return null;
+                return DxtDecoder.Decode(uncompressed, image.Width, image.Height, dxt1: false);
+            case ZlCodec.Bgra32:
+                return BgraToRgba(uncompressed);
+            case ZlCodec.Png:
+                byte[]? png = PngDecoder.Decode(uncompressed, out int w, out int h);
+                if (png != null)
+                {
+                    image.Width = (short)w;
+                    image.Height = (short)h;
+                }
+                return png;
+            default:
+                return null;
+        }
     }
 
     private static byte[] BgraToRgba(ReadOnlySpan<byte> src)

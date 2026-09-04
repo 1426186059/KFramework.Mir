@@ -475,6 +475,189 @@ namespace Shared.Rendering
             }
         }
 
+        /// <summary>纯托管 PNG 解码（WASM 无 System.Drawing.Bitmap）。输入完整 PNG 字节，输出 BGRA32 以匹配 Bgra32 纹理。</summary>
+        internal static byte[] DecodePngToBgra(byte[] buffer, out Size size)
+        {
+            size = new Size(0, 0);
+            if (buffer == null || buffer.Length < 8) return Array.Empty<byte>();
+
+            // PNG 签名: 137 80 78 71 13 10 26 10
+            if (buffer[0] != 137 || buffer[1] != 80 || buffer[2] != 78 || buffer[3] != 71 ||
+                buffer[4] != 13 || buffer[5] != 10 || buffer[6] != 26 || buffer[7] != 10)
+                return Array.Empty<byte>();
+
+            int width = 0, height = 0, bitDepth = 8, colorType = 6;
+            byte[] idat = null;
+            byte[] palette = null;
+
+            int pos = 8;
+            while (pos + 8 <= buffer.Length)
+            {
+                int len = (buffer[pos] << 24) | (buffer[pos + 1] << 16) | (buffer[pos + 2] << 8) | buffer[pos + 3];
+                string type = System.Text.Encoding.ASCII.GetString(buffer, pos + 4, 4);
+                int dpos = pos + 8;
+                if (len < 0 || dpos + len + 4 > buffer.Length) break;
+
+                if (type == "IHDR")
+                {
+                    width = (buffer[dpos] << 24) | (buffer[dpos + 1] << 16) | (buffer[dpos + 2] << 8) | buffer[dpos + 3];
+                    height = (buffer[dpos + 4] << 24) | (buffer[dpos + 5] << 16) | (buffer[dpos + 6] << 8) | buffer[dpos + 7];
+                    bitDepth = buffer[dpos + 8];
+                    colorType = buffer[dpos + 9];
+                }
+                else if (type == "PLTE")
+                {
+                    palette = new byte[len];
+                    Buffer.BlockCopy(buffer, dpos, palette, 0, len);
+                }
+                else if (type == "IDAT")
+                {
+                    byte[] chunk = new byte[len];
+                    Buffer.BlockCopy(buffer, dpos, chunk, 0, len);
+                    idat = idat == null ? chunk : Concat(idat, chunk);
+                }
+                else if (type == "IEND")
+                {
+                    break;
+                }
+
+                pos = dpos + len + 4; // 跳过 crc
+            }
+
+            if (width <= 0 || height <= 0 || idat == null) return Array.Empty<byte>();
+            if (bitDepth != 8) return Array.Empty<byte>(); // 仅支持 8-bit
+
+            byte[] raw = InflateZlib(idat);
+            if (raw == null) return Array.Empty<byte>();
+
+            byte[] bgra = UnfilterToBgra(raw, width, height, colorType, palette);
+            if (bgra == null) return Array.Empty<byte>();
+
+            size = new Size(width, height);
+            return bgra;
+        }
+
+        private static byte[] Concat(byte[] a, byte[] b)
+        {
+            byte[] r = new byte[a.Length + b.Length];
+            Buffer.BlockCopy(a, 0, r, 0, a.Length);
+            Buffer.BlockCopy(b, 0, r, a.Length, b.Length);
+            return r;
+        }
+
+        private static byte[] InflateZlib(byte[] zlib)
+        {
+            try
+            {
+                using var input = new MemoryStream(zlib);
+                using var zs = new ZLibStream(input, CompressionMode.Decompress);
+                using var output = new MemoryStream();
+                zs.CopyTo(output);
+                return output.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static byte[] UnfilterToBgra(byte[] raw, int w, int h, int colorType, byte[] palette)
+        {
+            int channels = colorType switch
+            {
+                0 => 1, // Gray
+                2 => 3, // RGB
+                3 => 1, // Palette
+                4 => 2, // Gray+Alpha
+                6 => 4, // RGBA
+                _ => -1
+            };
+            if (channels < 0) return null;
+
+            int bpp = channels; // 8-bit
+            int stride = w * bpp;
+            byte[] result = new byte[w * h * 4];
+            byte[] cur = new byte[stride];
+            byte[] prev = new byte[stride];
+
+            for (int y = 0; y < h; y++)
+            {
+                int lineStart = y * (stride + 1);
+                int filter = raw[lineStart];
+                int dataStart = lineStart + 1;
+
+                for (int i = 0; i < stride; i++)
+                {
+                    int x = raw[dataStart + i];
+                    int a = i >= bpp ? cur[i - bpp] : 0;
+                    int b = prev[i];
+                    int c = i >= bpp ? prev[i - bpp] : 0;
+
+                    int recon = filter switch
+                    {
+                        0 => x,
+                        1 => x + a,
+                        2 => x + b,
+                        3 => x + ((a + b) >> 1),
+                        4 => x + Paeth(a, b, c),
+                        _ => x
+                    };
+                    cur[i] = (byte)(recon & 0xFF);
+                }
+
+                WriteBgraRow(result, y, w, colorType, cur, bpp, palette);
+                (prev, cur) = (cur, prev);
+            }
+
+            return result;
+        }
+
+        private static void WriteBgraRow(byte[] result, int y, int w, int colorType, byte[] cur, int bpp, byte[] palette)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int s = x * bpp;
+                int d = (y * w + x) * 4;
+                switch (colorType)
+                {
+                    case 6: // RGBA -> BGRA
+                        result[d] = cur[s + 2]; result[d + 1] = cur[s + 1]; result[d + 2] = cur[s]; result[d + 3] = cur[s + 3];
+                        break;
+                    case 2: // RGB -> BGRA
+                        result[d] = cur[s + 2]; result[d + 1] = cur[s + 1]; result[d + 2] = cur[s]; result[d + 3] = 255;
+                        break;
+                    case 0: // Gray
+                        result[d] = cur[s]; result[d + 1] = cur[s]; result[d + 2] = cur[s]; result[d + 3] = 255;
+                        break;
+                    case 4: // Gray+Alpha
+                        result[d] = cur[s]; result[d + 1] = cur[s]; result[d + 2] = cur[s]; result[d + 3] = cur[s + 1];
+                        break;
+                    case 3: // Palette
+                        int idx = cur[s];
+                        if (palette != null && idx * 3 + 2 < palette.Length)
+                        {
+                            result[d] = palette[idx * 3 + 2]; result[d + 1] = palette[idx * 3 + 1]; result[d + 2] = palette[idx * 3]; result[d + 3] = 255;
+                        }
+                        else
+                        {
+                            result[d] = result[d + 1] = result[d + 2] = 0; result[d + 3] = 255;
+                        }
+                        break;
+                }
+            }
+        }
+
+        private static int Paeth(int a, int b, int c)
+        {
+            int p = a + b - c;
+            int pa = Math.Abs(p - a);
+            int pb = Math.Abs(p - b);
+            int pc = Math.Abs(p - c);
+            if (pa <= pb && pa <= pc) return a;
+            if (pb <= pc) return b;
+            return c;
+        }
+
         public bool VisiblePixel(int index, Point location, bool accurate = true, bool offSet = false)
         {
             if (!CheckImage(index)) return false;
@@ -1186,10 +1369,7 @@ namespace Shared.Rendering
 
         private static byte[] DecodePngBgra(byte[] buffer, out Size size)
         {
-            // 浏览器 WASM 无 System.Drawing.Bitmap；本工程资源为 DXT1/DXT5，PNG 路径不会被触发。
-            // 返回空像素作安全降级，避免单张不支持的图片导致整页崩溃。
-            size = new Size(0, 0);
-            return Array.Empty<byte>();
+            return MirLibrary.DecodePngToBgra(buffer, out size);
         }
 
         private static byte[] DecodeBc7Bgra(byte[] buffer, short width, short height, out Size size)
@@ -1761,10 +1941,7 @@ namespace Shared.Rendering
 
         private static byte[] DecodePngBgra(byte[] buffer, out Size size)
         {
-            // 浏览器 WASM 无 System.Drawing.Bitmap；本工程资源为 DXT1/DXT5，PNG 路径不会被触发。
-            // 返回空像素作安全降级，避免单张不支持的图片导致整页崩溃。
-            size = new Size(0, 0);
-            return Array.Empty<byte>();
+            return MirLibrary.DecodePngToBgra(buffer, out size);
         }
 
         private static byte[] DecodeBc7Bgra(byte[] buffer, short width, short height, out Size size)

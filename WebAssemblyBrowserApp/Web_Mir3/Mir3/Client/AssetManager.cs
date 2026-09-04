@@ -90,14 +90,13 @@ public sealed class AssetManager
         if (index >= lib.Images.Length) return 0;
 
         ZlImage? img = lib.Images[index];
-        if (img == null || img.Width <= 0 || img.Height <= 0 || !img.IsDxt) return 0;
-        if (img.Position <= 0) return 0;
+        if (img == null || img.Position <= 0) return 0;
 
         byte[] raw = _raw[fileId];
-        if (img.Position + img.DataSize > raw.Length) return 0;
+        if (img.Position + img.PayloadSize > raw.Length) return 0;
 
-        byte[]? rgba = lib.DecodeImage(img, raw.AsSpan(img.Position, img.DataSize));
-        if (rgba == null) return 0;
+        byte[]? rgba = lib.DecodeImage(img, raw.AsSpan(img.Position, img.PayloadSize));
+        if (rgba == null || img.Width <= 0 || img.Height <= 0) return 0;
 
         int key = _nextKey++;
         MirCanvas.CreateImage(key, rgba, img.Width, img.Height);
