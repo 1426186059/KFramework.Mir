@@ -285,15 +285,6 @@ namespace Shared.Rendering
                         rgba = buffer;
                     }
 
-                    if (_texLogCount < 15)
-                    {
-                        _texLogCount++;
-                        int nz = 0;
-                        int lim = Math.Min(rgba.Length, 4096);
-                        for (int i = 0; i < lim; i++) if (rgba[i] != 0) nz++;
-                        BrowserResource.Log($"[Mir][Tex] #{_texLogCount} id={id} fmt={format} {w}x{h} len={rgba.Length} nonzero={nz}/{lim}");
-                    }
-
                     BrowserCanvas.UploadImage(id, rgba, w, h);
                 }
                 catch (Exception ex)

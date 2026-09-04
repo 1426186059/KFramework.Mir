@@ -57,7 +57,6 @@ try {
                 await preloadAssets(preload);
             }
         } catch (e) {
-            console.warn('DB 预加载失败，将回退为同步取字节', e);
         }
     }
 

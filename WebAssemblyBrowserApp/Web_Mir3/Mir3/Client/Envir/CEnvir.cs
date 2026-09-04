@@ -432,7 +432,7 @@ namespace Client.Envir
             ClientSystemDatabaseExists = false;
             Loading = true;
 
-            Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: creating MirDB.Session");
+            // Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: creating MirDB.Session");
             Session = new MirDB.Session(SessionMode.Users, @".\Data\") { BackUp = false };
 
             // Unity 移植版写法：直接 yield return 返回 IEnumerator 的 Initialize，
@@ -445,11 +445,11 @@ namespace Client.Envir
             ClientSystemDatabaseVersion = Session.SystemDatabaseVersion;
             ClientSystemDatabaseExists = Session.SystemDatabaseExists;
 
-            Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: SystemDatabaseVersion='{ClientSystemDatabaseVersion}' Exists={ClientSystemDatabaseExists}");
+            // Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: SystemDatabaseVersion='{ClientSystemDatabaseVersion}' Exists={ClientSystemDatabaseExists}");
 
             if (!ClientSystemDatabaseExists)
             {
-                Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: Exists=false -> Loaded stays false!");
+                // Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: Exists=false -> Loaded stays false!");
                 Loading = false;
                 yield break;
             }
@@ -503,11 +503,11 @@ namespace Client.Envir
 
                 Loading = false;
                 Loaded = true;
-                Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
+                // Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase EXCEPTION(post): {ex}");
+                Console.WriteLine($"[DB] CEnvir.LoadDatabase EXCEPTION(post): {ex}");
                 Loading = false;
             }
         }

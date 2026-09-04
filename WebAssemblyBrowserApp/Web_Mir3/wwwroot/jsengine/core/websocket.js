@@ -15,19 +15,18 @@ export const wsConnect = (url) => {
         if (typeof location !== 'undefined' && location.protocol === 'https:' && url.startsWith('ws://')) {
             url = 'wss://' + url.slice('ws://'.length);
         }
-        console.log('[WS-DIAG] wsConnect creating WebSocket url=' + url);
         const ws = new WebSocket(url);
         ws.binaryType = 'arraybuffer';
         id = nextId++;
         const inst = { ws, messages: [], open: false };
-        ws.onopen = () => { inst.open = true; console.log('[WS-DIAG] ws.onopen id=' + id + ' url=' + url); };
+        ws.onopen = () => { inst.open = true; };
         ws.onmessage = (e) => {
             // 一条 WS 二进制消息 = 一条 Mir Packet 的字节
             const data = (e.data instanceof ArrayBuffer) ? new Uint8Array(e.data) : new Uint8Array(0);
             inst.messages.push(data);
         };
-        ws.onclose = (e) => { inst.open = false; console.log('[WS-DIAG] ws.onclose id=' + id + ' code=' + (e.code) + ' reason=' + (e.reason || '') + ' wasClean=' + (e.wasClean)); };
-        ws.onerror = (e) => { inst.open = false; console.log('[WS-DIAG] ws.onerror id=' + id + ' ' + (e && e.message ? e.message : '')); };
+        ws.onclose = (e) => { inst.open = false; };
+        ws.onerror = (e) => { inst.open = false; };
         instances[id] = inst;
     } catch (e) {
         console.error('[ws] connect failed', e);

@@ -5,15 +5,6 @@
 import { dom, gfx, toCss } from '../../shared.js';
 
 export const createImage = (key, rgba, w, h) => {
-    if (gfx._upCount === undefined) gfx._upCount = 0;
-    if (gfx._upCount < 80) {
-        gfx._upCount++;
-        // 统计前 4096 字节里 alpha>0 的像素数，用于判断图像是否整体透明（即使 RGB 有值）
-        let alphaNonZero = 0;
-        const lim = Math.min(rgba ? rgba.length : 0, 4096);
-        for (let i = 3; i < lim; i += 4) if (rgba[i] > 0) alphaNonZero++;
-        console.log(`[createImage] #${gfx._upCount} key=${key} w=${w} h=${h} len=${rgba?.length} alphaNonZero=${alphaNonZero}/${lim / 4}`);
-    }
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
     const c = cv.getContext('2d');

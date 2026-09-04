@@ -62,7 +62,7 @@ export const crClear = (r, g, b, a) => {
 
 export const crDraw = (tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb) => {
     const src = gfx.textures.get(tex) || gfx.offscreens.get(tex)?.canvas;
-    if (!src) { console.warn(`[crDraw] 纹理缺失 tex=${tex} (sx=${sx} sy=${sy} sw=${sw} sh=${sh})`); return; }
+    if (!src) { return; }
     if (sw <= 0 || sh <= 0) return;
     const ctx = gfx.cur.ctx;
     ctx.globalCompositeOperation = gfx.blendOp;
@@ -81,7 +81,7 @@ export const crDraw = (tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb) => {
 // 用 transform（乘法）而非 setTransform，以保留绘制表面当前的基变换（如 dpr 缩放）。
 export const crDrawTransform = (tex, sx, sy, sw, sh, m11, m12, m21, m22, m31, m32, colorArgb) => {
     const src = gfx.textures.get(tex) || gfx.offscreens.get(tex)?.canvas;
-    if (!src) { console.warn(`[crDrawTransform] 纹理缺失 tex=${tex}`); return; }
+    if (!src) { return; }
     if (sw <= 0 || sh <= 0) return;
     const ctx = gfx.cur.ctx;
     ctx.save();
@@ -102,8 +102,6 @@ export const crMeasureText = (text, fontCss, maxWidth) => {
 };
 
 export const crFillRect = (x, y, w, h, colorArgb) => {
-    if (gfx.cur === gfx.mainTarget && w >= 200 && h >= 200)
-        console.log(`[crFillRect] MAIN x=${x} y=${y} w=${w} h=${h} argb=${colorArgb}`);
     gfx.cur.ctx.fillStyle = toCss(colorArgb);
     gfx.cur.ctx.fillRect(x, y, w, h);
 };

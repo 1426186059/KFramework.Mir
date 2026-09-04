@@ -88,7 +88,9 @@ namespace Library.Network
                         parsed++;
                     }
                     if (dataRead > 0 && parsed == 0)
-                        Console.WriteLine($"[WS-DIAG] PumpReceive: read {dataRead} bytes but parsed 0 packets; rawDataLen={_rawData.Length}; firstBytes={BitConverter.ToString(_rawData, 0, Math.Min(_rawData.Length, 16))}");
+                    {
+                        // PumpReceive: 读到了字节但解析出 0 个包
+                    }
                 }
             }
             catch (Exception ex)

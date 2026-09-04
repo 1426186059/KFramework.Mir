@@ -8,6 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using Library.SystemModels;
 
 namespace MirDB
@@ -113,6 +114,7 @@ namespace MirDB
         public IEnumerable<ADBCollection> InitializeIncremental(params Assembly[] assemblies)
         {
             Assemblies = assemblies;
+            Stopwatch dbSw = Stopwatch.StartNew();
 
             if (DatabaseBytesLoader == null)
             {
@@ -136,6 +138,8 @@ namespace MirDB
                 Collections[type] = (ADBCollection)Activator.CreateInstance(collectionType.MakeGenericType(type), this);
             }
 
+            Console.WriteLine($"[DB] InitializeIncremental: 发现 {Collections.Count} 张表, 来自 {assemblies.Length} 个程序集");
+
             foreach (ADBCollection c in InitializeSystemIncremental())
                 yield return c;
 
@@ -155,6 +159,9 @@ namespace MirDB
 
             if (migrationPending)
                 Save(true);
+
+            dbSw.Stop();
+            Console.WriteLine($"[DB] InitializeIncremental 完成: 共 {Collections.Count} 张表, 耗时 {dbSw.ElapsedMilliseconds}ms");
         }
 
         /// <summary>
@@ -216,6 +223,7 @@ namespace MirDB
                 for (int i = 0; i < count; i++)
                     mappings.Add(new DBMapping(Assemblies, reader));
 
+                int loaded = 0;
                 foreach (DBMapping mapping in mappings)
                 {
                     byte[] data = reader.ReadBytes(reader.ReadInt32());
@@ -224,6 +232,7 @@ namespace MirDB
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
                     value.Load(data, mapping);
+                    Console.WriteLine($"[DB] 加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
                     yield return value; // 让出：调用方（协程）可在此切回主循环
                 }
             }
@@ -268,6 +277,7 @@ namespace MirDB
                 for (int i = 0; i < count; i++)
                     mappings.Add(new DBMapping(Assemblies, reader));
 
+                int loaded = 0;
                 foreach (DBMapping mapping in mappings)
                 {
                     byte[] data = reader.ReadBytes(reader.ReadInt32());
@@ -276,6 +286,7 @@ namespace MirDB
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
                     value.Load(data, mapping);
+                    Console.WriteLine($"[DB] 加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
                     yield return value; // 让出：调用方（协程）可在此切回主循环
                 }
             }

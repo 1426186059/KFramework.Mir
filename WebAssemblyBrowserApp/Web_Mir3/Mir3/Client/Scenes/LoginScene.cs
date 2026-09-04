@@ -349,7 +349,7 @@ namespace Client.Scenes
                     // 创建传输层（Auto 模式在浏览器下自动选 JS WebSocket，否则选 C# ClientWebSocket）
                     // 并异步发起连接；连接结果在下方每帧轮询 State/IsConnected 获得。
                     ConnectingTransport = ClientNetworkFactory.Create();
-                    Console.WriteLine($"[WS-DIAG] LoginScene: creating transport + Connect host={ClientNetworkFactory.ResolveHost()} port={ClientNetworkFactory.ResolvePort()} attempt={ConnectionAttempt + 1}");
+                    // Console.WriteLine($"[WS-DIAG] LoginScene: creating transport + Connect host={ClientNetworkFactory.ResolveHost()} port={ClientNetworkFactory.ResolvePort()} attempt={ConnectionAttempt + 1}");
                     ConnectingTransport.Connect(ClientNetworkFactory.ResolveHost(), ClientNetworkFactory.ResolvePort());
 
                     ConnectionTime = CEnvir.Now.AddSeconds(5); // 连接超时
@@ -358,7 +358,7 @@ namespace Client.Scenes
                 else if (ConnectingTransport.IsConnected)
                 {
                     // 连接已建立：握手还需额外 5 秒容错
-                    Console.WriteLine($"[WS-DIAG] LoginScene: transport IsConnected=true -> creating CConnection (handshake begins)");
+                    // Console.WriteLine($"[WS-DIAG] LoginScene: transport IsConnected=true -> creating CConnection (handshake begins)");
                     ConnectionTime = CEnvir.Now.AddSeconds(5);
                     INetworkTransport transport = ConnectingTransport;
                     ConnectingTransport = null;
@@ -368,7 +368,7 @@ namespace Client.Scenes
                 else if (CEnvir.Now >= ConnectionTime)
                 {
                     // 连接超时：销毁并在下一帧重建重试
-                    Console.WriteLine($"[WS-DIAG] LoginScene: connect TIMEOUT (now>=ConnectionTime) -> disconnect + retry");
+                    // Console.WriteLine($"[WS-DIAG] LoginScene: connect TIMEOUT (now>=ConnectionTime) -> disconnect + retry");
                     ConnectingTransport.Disconnect();
                     ConnectingTransport = null;
                 }
@@ -407,7 +407,7 @@ namespace Client.Scenes
 
         public void LoadDatabase()
         {
-            Console.WriteLine($"[WS-DIAG] LoginScene.LoadDatabase -> CoroutineManager.StartCoroutine(CEnvir.LoadDatabase())");
+            // Console.WriteLine($"[WS-DIAG] LoginScene.LoadDatabase -> CoroutineManager.StartCoroutine(CEnvir.LoadDatabase())");
             CoroutineManager.Instance.StartCoroutine(CEnvir.LoadDatabase());
         }
 
