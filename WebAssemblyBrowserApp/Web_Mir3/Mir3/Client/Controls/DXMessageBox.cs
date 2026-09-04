@@ -82,7 +82,8 @@ namespace Client.Controls
                 Text = message,
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter
             };
-            Label.Size = new Size(380, DXLabel.GetSize(message, Label.Font, Label.Outline).Height);
+            Size labelSize = DXLabel.GetSize(message, Label.Font, Label.Outline);
+            Label.Size = new Size(Math.Max(380, labelSize.Width + 20), Math.Max(labelSize.Height + 16, 50));
             SetClientSize(Label.Size);
             Label.Location = ClientArea.Location;
 

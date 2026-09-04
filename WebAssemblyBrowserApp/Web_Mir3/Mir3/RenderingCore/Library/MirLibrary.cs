@@ -620,11 +620,11 @@ namespace Shared.Rendering
                 int d = (y * w + x) * 4;
                 switch (colorType)
                 {
-                    case 6: // RGBA -> BGRA
-                        result[d] = cur[s + 2]; result[d + 1] = cur[s + 1]; result[d + 2] = cur[s]; result[d + 3] = cur[s + 3];
+                    case 6: // RGBA -> RGBA（纹理上传通道为 RGBA）
+                        result[d] = cur[s]; result[d + 1] = cur[s + 1]; result[d + 2] = cur[s + 2]; result[d + 3] = cur[s + 3];
                         break;
-                    case 2: // RGB -> BGRA
-                        result[d] = cur[s + 2]; result[d + 1] = cur[s + 1]; result[d + 2] = cur[s]; result[d + 3] = 255;
+                    case 2: // RGB -> RGBA
+                        result[d] = cur[s]; result[d + 1] = cur[s + 1]; result[d + 2] = cur[s + 2]; result[d + 3] = 255;
                         break;
                     case 0: // Gray
                         result[d] = cur[s]; result[d + 1] = cur[s]; result[d + 2] = cur[s]; result[d + 3] = 255;
@@ -632,11 +632,11 @@ namespace Shared.Rendering
                     case 4: // Gray+Alpha
                         result[d] = cur[s]; result[d + 1] = cur[s]; result[d + 2] = cur[s]; result[d + 3] = cur[s + 1];
                         break;
-                    case 3: // Palette
+                    case 3: // Palette -> RGBA
                         int idx = cur[s];
                         if (palette != null && idx * 3 + 2 < palette.Length)
                         {
-                            result[d] = palette[idx * 3 + 2]; result[d + 1] = palette[idx * 3 + 1]; result[d + 2] = palette[idx * 3]; result[d + 3] = 255;
+                            result[d] = palette[idx * 3]; result[d + 1] = palette[idx * 3 + 1]; result[d + 2] = palette[idx * 3 + 2]; result[d + 3] = 255;
                         }
                         else
                         {
