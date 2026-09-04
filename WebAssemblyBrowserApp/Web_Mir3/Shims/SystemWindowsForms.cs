@@ -109,23 +109,27 @@ namespace System.Windows.Forms
         Modifiers = unchecked((int)0xFFFF0000),
     }
 
+    // 注意：位值必须与真实 System.Windows.Forms.TextFormatFlags 保持一致，
+    // 因为 Client 代码（DXLabel/DXButton 等）把 (int)DrawFormat 直接传给 Canvas 端
+    // drawLabel / MeasureText，后者按 .NET 标准位（HorizontalCenter=1, VerticalCenter=4,
+    // Right=2, Bottom=8, WordBreak=16）解读。之前的值整体左移了一位，导致居中变右下角。
     [Flags]
     public enum TextFormatFlags
     {
         Default = 0,
-        Left = 0x1,
+        Left = 0x0,
         Top = 0x0,
-        HorizontalCenter = 0x2,
-        Right = 0x4,
-        VerticalCenter = 0x8,
-        Bottom = 0x10,
-        WordBreak = 0x20,
-        SingleLine = 0x40,
-        ExpandTabs = 0x80,
+        HorizontalCenter = 0x1,
+        Right = 0x2,
+        VerticalCenter = 0x4,
+        Bottom = 0x8,
+        WordBreak = 0x10,
+        SingleLine = 0x20,
+        ExpandTabs = 0x400,
         NoClipping = 0x100,
         ExternalLeading = 0x200,
-        NoPrefix = 0x400,
-        Internal = 0x800,
+        NoPrefix = 0x800,
+        Internal = 0x1000,
         TextBoxControl = 0x2000,
         PathEllipsis = 0x4000,
         EndEllipsis = 0x8000,
@@ -135,10 +139,7 @@ namespace System.Windows.Forms
         HidePrefix = 0x100000,
         NoPadding = 0x1000000,
         LeftAndRightPadding = 0x2000000,
-        PreserveGraphicsClipping = 0x4000000,
-        PreserveGraphicsTranslateTransform = 0x8000000,
-        NoWrap = 0x10000000,
-        WordEllipsis = 0x20000000,
+        WordEllipsis = 0x40000,
     }
 
     public enum BorderStyle
