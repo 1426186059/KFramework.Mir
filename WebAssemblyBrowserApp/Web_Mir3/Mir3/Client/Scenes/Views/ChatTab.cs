@@ -676,7 +676,7 @@ namespace Client.Scenes.Views
                         Location = info.Region.Location,
                         DrawFormat = label.DrawFormat,
                         Text = label.Text.Substring(info.Index, info.Length),
-                        Font = new Font(label.Font.FontFamily, label.Font.Size, FontStyle.Underline),
+                        Font = new Font(label.Font.Name, label.Font.Size, FontStyle.Underline),
                         Size = info.Region.Size,
                         Outline = false,
                         Sound = SoundIndex.ButtonC,

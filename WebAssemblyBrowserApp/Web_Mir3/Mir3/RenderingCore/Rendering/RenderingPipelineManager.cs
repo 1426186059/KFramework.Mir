@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
 using MirEngine;
-using Font = MirEngine.Font;
 using Shared.Rendering;
 
 namespace Shared.Rendering
@@ -331,7 +330,7 @@ namespace Shared.Rendering
             PipelineFactories[pipelineId] = factory;
         }
 
-        public static Size MeasureText(string text, System.Drawing.Font font)
+        public static Size MeasureText(string text, MirEngine.Font font)
         {
             if (_activePipeline != null)
                 return _activePipeline.MeasureText(text, font);
@@ -339,7 +338,7 @@ namespace Shared.Rendering
             return new Size(0, 12);
         }
 
-        public static Size MeasureText(string text, System.Drawing.Font font, Size proposedSize)
+        public static Size MeasureText(string text, MirEngine.Font font, Size proposedSize)
         {
             if (_activePipeline != null)
                 return _activePipeline.MeasureText(text, font, proposedSize);
@@ -347,7 +346,7 @@ namespace Shared.Rendering
             return new Size(0, 12);
         }
 
-        public static Size MeasureText(string text, System.Drawing.Font font, Size proposedSize, System.Windows.Forms.TextFormatFlags flags)
+        public static Size MeasureText(string text, MirEngine.Font font, Size proposedSize, System.Windows.Forms.TextFormatFlags flags)
         {
             if (_activePipeline != null)
                 return _activePipeline.MeasureText(text, font, proposedSize, flags);

@@ -4,3 +4,7 @@
 global using Shared.Envir;
 global using Shared.Rendering;
 global using System.Windows.Forms;
+// 用浏览器安全的 MirEngine.Font / MirEngine.FontStyle 覆盖 System.Drawing 的同名 GDI 类型，
+// 避免任何 new Font(...) 在 WASM 下触发 gdiplus.dll（System.Drawing.Font 构造即 P/Invoke GDI+）。
+global using Font = MirEngine.Font;
+global using FontStyle = MirEngine.FontStyle;

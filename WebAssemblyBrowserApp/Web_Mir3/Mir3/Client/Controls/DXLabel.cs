@@ -1,10 +1,7 @@
 using Client.Envir;
 using System;
 using System.Drawing;
-using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using Font = System.Drawing.Font;
 
 //Cleaned
 namespace Client.Controls
@@ -413,108 +410,23 @@ namespace Client.Controls
                 RenderingPipelineManager.RegisterControlCache(this);
             }
 
-            using (TextureLock textureLock = RenderingPipelineManager.LockTexture(_labelTextureHandle, TextureLockMode.Discard))
-            using (Bitmap image = new Bitmap(width, height, textureLock.Pitch, PixelFormat.Format32bppArgb, textureLock.DataPointer))
-            using (Graphics graphics = Graphics.FromImage(image))
-            {
-                RenderingPipelineManager.ConfigureGraphics(graphics);
-                graphics.Clear(BackColour);
+            bool gradient = Gradient && (!GradientTopColour.IsEmpty || !GradientBottomColour.IsEmpty);
+            int handle = (int)_labelTextureHandle.NativeHandle;
+            int fore = ForeColour.ToArgb();
+            int outline = Outline ? OutlineColour.ToArgb() : -1;
+            int back = BackColour.IsEmpty ? -1 : BackColour.ToArgb();
+            int gTop = GradientTopColour.IsEmpty ? fore : GradientTopColour.ToArgb();
+            int gBot = GradientBottomColour.IsEmpty ? fore : GradientBottomColour.ToArgb();
 
-                if (Gradient)
-                {
-                    DrawGradientText(graphics, width, height);
-                }
-                else if (Outline)
-                {
-                    TextRenderer.DrawText(graphics, Text, Font, new Rectangle(1, 0, width, height), OutlineColour, DrawFormat);
-                    TextRenderer.DrawText(graphics, Text, Font, new Rectangle(0, 1, width, height), OutlineColour, DrawFormat);
-                    TextRenderer.DrawText(graphics, Text, Font, new Rectangle(2, 1, width, height), OutlineColour, DrawFormat);
-                    TextRenderer.DrawText(graphics, Text, Font, new Rectangle(1, 2, width, height), OutlineColour, DrawFormat);
-                    TextRenderer.DrawText(graphics, Text, Font, new Rectangle(1, 1, width, height), ForeColour, DrawFormat);
-                }
-                else
-                {
-                    TextRenderer.DrawText(graphics, Text, Font, new Rectangle(1, 0, width, height), ForeColour, DrawFormat);
-                }
-            }
+            // 浏览器端用 Canvas 渲染文字（见 BrowserCanvas.DrawLabel / jsengine/render/canvas/canvas2d.js 的 mir.drawLabel），
+            // 不再使用 GDI 的 Bitmap/Graphics/TextRenderer（WASM 无 gdiplus.dll）。
+            MirEngine.BrowserCanvas.DrawLabel(handle, width, height, Text ?? string.Empty, Font.ToCss(),
+                fore, outline, (int)DrawFormat, back, gTop, gBot, gradient);
+
             TextureValid = true;
             ExpireTime = CEnvir.Now + Config.CacheDuration;
         }
 
-        private void DrawGradientText(Graphics graphics, int width, int height)
-        {
-            if (string.IsNullOrEmpty(Text) || width <= 0 || height <= 0) return;
-
-            Color topColour = GradientTopColour.IsEmpty ? ForeColour : GradientTopColour;
-            Color bottomColour = GradientBottomColour.IsEmpty ? ForeColour : GradientBottomColour;
-
-            if (Outline)
-            {
-                TextRenderer.DrawText(graphics, Text, Font, new Rectangle(1, 0, width, height), OutlineColour, DrawFormat);
-                TextRenderer.DrawText(graphics, Text, Font, new Rectangle(0, 1, width, height), OutlineColour, DrawFormat);
-                TextRenderer.DrawText(graphics, Text, Font, new Rectangle(2, 1, width, height), OutlineColour, DrawFormat);
-                TextRenderer.DrawText(graphics, Text, Font, new Rectangle(1, 2, width, height), OutlineColour, DrawFormat);
-            }
-
-            using (Bitmap textMask = new Bitmap(width, height, PixelFormat.Format32bppArgb))
-            using (Graphics maskGraphics = Graphics.FromImage(textMask))
-            {
-                RenderingPipelineManager.ConfigureGraphics(maskGraphics);
-                maskGraphics.Clear(Color.Transparent);
-
-                Rectangle textBounds = Outline
-                    ? new Rectangle(1, 1, width, height)
-                    : new Rectangle(1, 0, width, height);
-
-                TextRenderer.DrawText(maskGraphics, Text, Font, textBounds, Color.White, DrawFormat);
-                ApplyGradientToMask(textMask, topColour, bottomColour);
-
-                graphics.DrawImageUnscaled(textMask, 0, 0);
-            }
-        }
-
-        private static void ApplyGradientToMask(Bitmap textMask, Color topColour, Color bottomColour)
-        {
-            Rectangle bounds = new Rectangle(Point.Empty, textMask.Size);
-            BitmapData data = textMask.LockBits(bounds, ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
-
-            try
-            {
-                int byteCount = Math.Abs(data.Stride) * data.Height;
-                byte[] pixels = new byte[byteCount];
-                Marshal.Copy(data.Scan0, pixels, 0, byteCount);
-
-                int gradientHeight = Math.Max(1, data.Height - 1);
-
-                for (int y = 0; y < data.Height; y++)
-                {
-                    float amount = y / (float)gradientHeight;
-                    byte red = (byte)(topColour.R + (bottomColour.R - topColour.R) * amount);
-                    byte green = (byte)(topColour.G + (bottomColour.G - topColour.G) * amount);
-                    byte blue = (byte)(topColour.B + (bottomColour.B - topColour.B) * amount);
-
-                    int row = y * data.Stride;
-
-                    for (int x = 0; x < data.Width; x++)
-                    {
-                        int index = row + x * 4;
-                        byte alpha = pixels[index + 3];
-
-                        if (alpha == 0) continue;
-
-                        pixels[index] = blue;
-                        pixels[index + 1] = green;
-                        pixels[index + 2] = red;
-                    }
-                }
-
-                Marshal.Copy(pixels, 0, data.Scan0, byteCount);
-            }
-            finally
-            {
-                textMask.UnlockBits(data);
-            }
-        }
 
         public override void DisposeTexture()
         {

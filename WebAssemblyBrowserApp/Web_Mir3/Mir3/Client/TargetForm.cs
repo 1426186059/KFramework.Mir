@@ -9,7 +9,6 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using Font = System.Drawing.Font;
 
 namespace Client
 {
@@ -229,22 +228,8 @@ namespace Client
         {
             Bitmap image = CEnvir.Target.GetImage();
 
-            using (Graphics graphics = Graphics.FromImage(image))
-            {
-                string text = $"Date: {CEnvir.Now.ToShortDateString()}{Environment.NewLine}";
-                text += $"Time: {CEnvir.Now.TimeOfDay:hh\\:mm\\:ss}{Environment.NewLine}";
-                if (GameScene.Game != null)
-                    text += $"Player: {MapObject.User.Name}{Environment.NewLine}";
-
-                using (Font font = new Font(Config.FontName, CEnvir.FontSize(8F)))
-                {
-                    graphics.DrawString(text, font, Brushes.Black, 3, 33);
-                    graphics.DrawString(text, font, Brushes.Black, 4, 32);
-                    graphics.DrawString(text, font, Brushes.Black, 5, 33);
-                    graphics.DrawString(text, font, Brushes.Black, 4, 34);
-                    graphics.DrawString(text, font, Brushes.White, 4, 33);
-                }
-            }
+            // 浏览器截图文本叠加：System.Drawing.Graphics/Bitmap 在 WASM 不可用，
+            // 截图图像本身由 CEnvir.Target.GetImage() 提供，文字叠加暂未实现。
 
             string path = Path.Combine(Application.StartupPath, @"Screenshots\");
             if (!Directory.Exists(path))

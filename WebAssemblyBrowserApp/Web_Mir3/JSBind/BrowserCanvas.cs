@@ -70,4 +70,12 @@ internal static partial class BrowserCanvas
         int h = int.Parse(s.AsSpan(i + 1));
         return new Size(w, h);
     }
+
+    /// <summary>在离屏 canvas 上把文字渲染成纹理句柄（替代 GDI 的 Bitmap/Graphics/TextRenderer 文本烘焙）。
+    /// 对应 jsengine/render/canvas/canvas2d.js 的 mir.drawLabel。</summary>
+    [JSImport("mir.drawLabel", "main.js")]
+    private static partial void DrawLabelImpl(int handle, int w, int h, string text, string fontCss, int foreArgb, int outlineArgb, int format, int backArgb, int gradTopArgb, int gradBottomArgb, bool gradient);
+
+    public static void DrawLabel(int handle, int w, int h, string text, string fontCss, int foreArgb, int outlineArgb, int format, int backArgb, int gradTopArgb, int gradBottomArgb, bool gradient)
+        => DrawLabelImpl(handle, w, h, text, fontCss, foreArgb, outlineArgb, format, backArgb, gradTopArgb, gradBottomArgb, gradient);
 }

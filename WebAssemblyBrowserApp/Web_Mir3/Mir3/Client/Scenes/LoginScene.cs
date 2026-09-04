@@ -10,7 +10,6 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Windows.Forms;
 using C = Library.Network.ClientPackets;
-using Font = System.Drawing.Font;
 
 //Cleaned
 namespace Client.Scenes

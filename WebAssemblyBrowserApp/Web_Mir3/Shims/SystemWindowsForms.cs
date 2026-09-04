@@ -233,7 +233,7 @@ namespace System.Windows.Forms
 
     public class TextBox : IDisposable
     {
-        public Font Font { get; set; }
+        public MirEngine.Font Font { get; set; }
         public int MaxLength { get; set; }
         public bool UseSystemPasswordChar { get; set; }
         public bool ReadOnly { get; set; }
@@ -327,14 +327,14 @@ namespace System.Windows.Forms
 
     public static class TextRenderer
     {
-        public static Size MeasureText(string text, Font font) => Size.Empty;
-        public static Size MeasureText(string text, Font font, Size proposedSize) => Size.Empty;
-        public static Size MeasureText(string text, Font font, TextFormatFlags flags) => Size.Empty;
-        public static Size MeasureText(string text, Font font, Size proposedSize, TextFormatFlags flags) => Size.Empty;
+        public static Size MeasureText(string text, MirEngine.Font font) => Size.Empty;
+        public static Size MeasureText(string text, MirEngine.Font font, Size proposedSize) => Size.Empty;
+        public static Size MeasureText(string text, MirEngine.Font font, TextFormatFlags flags) => Size.Empty;
+        public static Size MeasureText(string text, MirEngine.Font font, Size proposedSize, TextFormatFlags flags) => Size.Empty;
 
-        public static void DrawText(Graphics g, string text, Font font, Point pt, Color foreColor) { }
-        public static void DrawText(Graphics g, string text, Font font, Point pt, Color foreColor, TextFormatFlags flags) { }
-        public static void DrawText(Graphics g, string text, Font font, Rectangle bounds, Color foreColor) { }
-        public static void DrawText(Graphics g, string text, Font font, Rectangle bounds, Color foreColor, TextFormatFlags flags) { }
+        public static void DrawText(Graphics g, string text, MirEngine.Font font, Point pt, Color foreColor) { }
+        public static void DrawText(Graphics g, string text, MirEngine.Font font, Point pt, Color foreColor, TextFormatFlags flags) { }
+        public static void DrawText(Graphics g, string text, MirEngine.Font font, Rectangle bounds, Color foreColor) { }
+        public static void DrawText(Graphics g, string text, MirEngine.Font font, Rectangle bounds, Color foreColor, TextFormatFlags flags) { }
     }
 }

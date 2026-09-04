@@ -13,7 +13,6 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using C = Library.Network.ClientPackets;
-using Font = System.Drawing.Font;
 using S = Library.Network.ServerPackets;
 
 namespace Client.Scenes.Views

@@ -55,3 +55,52 @@ export const clear = (argb) => {
 };
 
 export const setStatus = (html) => { dom.panel.innerHTML = html; };
+
+// 在离屏 canvas 上渲染文字（描边/渐变/对齐），取 RGBA 后注册为纹理句柄。
+// 对应 C# 端 MirEngine.BrowserCanvas.DrawLabel（替代 DXLabel/DXTextBox 的 GDI 文本烘焙）。
+// format 位：HorizontalCenter=1, Right=2, VerticalCenter=4, Bottom=8。
+export const drawLabel = (handle, w, h, text, fontCss, foreArgb, outlineArgb, format, backArgb, gradTopArgb, gradBottomArgb, gradient) => {
+    w = Math.max(1, w | 0); h = Math.max(1, h | 0);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const c = cv.getContext('2d');
+    c.clearRect(0, 0, w, h);
+    if (backArgb >= 0) { c.fillStyle = toCss(backArgb); c.fillRect(0, 0, w, h); }
+    if (!text) { createImage(handle, new Uint8ClampedArray(c.getImageData(0, 0, w, h).data), w, h); return; }
+
+    c.font = fontCss;
+    c.textBaseline = 'top';
+    const horizontalCenter = (format & 1) !== 0;
+    const right = (format & 2) !== 0;
+    const verticalCenter = (format & 4) !== 0;
+    const bottom = (format & 8) !== 0;
+    const fs = parseInt((fontCss.match(/(\d+)(px|pt)/) || [])[1] || 12);
+    const lineHeight = fs * 1.3;
+    const textWidth = c.measureText(text).width;
+
+    let x = 1;
+    if (horizontalCenter) x = Math.max(0, (w - textWidth) / 2);
+    else if (right) x = Math.max(0, w - textWidth - 1);
+    let y = 0;
+    if (verticalCenter) y = Math.max(0, (h - lineHeight) / 2);
+    else if (bottom) y = Math.max(0, h - lineHeight);
+
+    const drawText = (argb, ox, oy) => { c.fillStyle = toCss(argb); c.fillText(text, x + ox, y + oy); };
+    const ox = outlineArgb >= 0 ? 1 : 0;
+    const oy = outlineArgb >= 0 ? 1 : 0;
+
+    if (outlineArgb >= 0) {
+        drawText(outlineArgb, 1, 0); drawText(outlineArgb, 0, 1); drawText(outlineArgb, 2, 1); drawText(outlineArgb, 1, 2);
+    }
+    if (gradient) {
+        const g = c.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, toCss(gradTopArgb));
+        g.addColorStop(1, toCss(gradBottomArgb));
+        c.fillStyle = g;
+        c.fillText(text, x + ox, y + oy);
+    } else {
+        drawText(foreArgb, ox, oy);
+    }
+
+    createImage(handle, new Uint8ClampedArray(c.getImageData(0, 0, w, h).data), w, h);
+};

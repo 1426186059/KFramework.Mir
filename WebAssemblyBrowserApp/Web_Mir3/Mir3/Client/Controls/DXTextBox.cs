@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using Font = System.Drawing.Font;
 
 //Cleaned
 namespace Client.Controls
@@ -303,11 +302,15 @@ namespace Client.Controls
                 RenderingPipelineManager.RegisterControlCache(this);
             }
 
-            using (TextureLock textureLock = RenderingPipelineManager.LockTexture(_textBoxTextureHandle, TextureLockMode.Discard))
-            using (Bitmap image = new Bitmap(DisplayArea.Width, DisplayArea.Height, textureLock.Pitch, PixelFormat.Format32bppArgb, textureLock.DataPointer))
-            {
-                TextBox.DrawToBitmap(image, new Rectangle(Point.Empty, Size.Round(DisplayArea.Size)));
-            }
+            // 浏览器端用 Canvas 渲染文本框文字（见 BrowserCanvas.DrawLabel / mir.drawLabel），
+            // 不再使用 GDI 的 Bitmap/Graphics/TextBox.DrawToBitmap（WASM 无 gdiplus.dll）。
+            string textBoxDisplay = TextBox.UseSystemPasswordChar
+                ? new string('*', TextBox.Text?.Length ?? 0)
+                : (TextBox.Text ?? string.Empty);
+            int tbFore = TextBox.ForeColor.IsEmpty ? Color.White.ToArgb() : TextBox.ForeColor.ToArgb();
+            int tbBack = TextBox.BackColor.IsEmpty ? -1 : TextBox.BackColor.ToArgb();
+            MirEngine.BrowserCanvas.DrawLabel((int)_textBoxTextureHandle.NativeHandle, DisplayArea.Width, DisplayArea.Height,
+                textBoxDisplay, Font.ToCss(), tbFore, -1, 4 /*VerticalCenter*/, tbBack, -1, -1, false);
 
             TextureValid = true;
             ExpireTime = CEnvir.Now + Config.CacheDuration;
