@@ -415,6 +415,7 @@ namespace Client.Envir
 
         public static void LoadDatabase()
         {
+            Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: start (DatabaseLoadAttempted=true)");
             DatabaseLoadAttempted = true;
             Loaded = false;
             ClientSystemDatabaseVersion = null;
@@ -425,6 +426,7 @@ namespace Client.Envir
             {
                 try
                 {
+                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: creating MirDB.Session(path=@'.\\Data\\')");
                     Session = new MirDB.Session(SessionMode.Users, @".\Data\") { BackUp = false };
 
                     Session.Initialize(
@@ -434,8 +436,9 @@ namespace Client.Envir
 
                     ClientSystemDatabaseVersion = Session.SystemDatabaseVersion;
                     ClientSystemDatabaseExists = Session.SystemDatabaseExists;
+                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: SystemDatabaseVersion='{ClientSystemDatabaseVersion}' Exists={ClientSystemDatabaseExists}");
 
-                    if (!ClientSystemDatabaseExists) return;
+                    if (!ClientSystemDatabaseExists) { Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: Exists=false -> early return, Loaded stays false!"); return; }
 
                     Globals.ItemInfoList = Session.GetCollection<ItemInfo>();
                     Globals.MagicInfoList = Session.GetCollection<MagicInfo>();
@@ -483,6 +486,11 @@ namespace Client.Envir
                     }
 
                     Loaded = true;
+                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase EXCEPTION: {ex}");
                 }
                 finally
                 {

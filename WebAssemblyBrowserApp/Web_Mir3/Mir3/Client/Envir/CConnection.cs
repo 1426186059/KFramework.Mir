@@ -43,6 +43,7 @@ namespace Client.Envir
         }
         public override void Disconnect()
         {
+            Console.WriteLine($"[WS-DIAG] CConnection.Disconnect() called");
             base.Disconnect();
 
             if (CEnvir.Connection == this)
@@ -70,6 +71,7 @@ namespace Client.Envir
 
         public void Process(G.Disconnect p)
         {
+            Console.WriteLine($"[WS-DIAG] CConnection.Process(G.Disconnect): Reason={p.Reason}");
             Disconnecting = true;
 
             LoginScene scene = DXControl.ActiveScene as LoginScene;
@@ -124,12 +126,14 @@ namespace Client.Envir
 
         public void Process(G.Connected p)
         {
+            Console.WriteLine($"[WS-DIAG] CConnection.Process(G.Connected): replying + ServerConnected=true");
             Enqueue(new G.Connected());
             ServerConnected = true;
 
         }
         public void Process(G.CheckVersion p)
         {
+            Console.WriteLine($"[WS-DIAG] CConnection.Process(G.CheckVersion): computing hash, sending G.Version");
             byte[] clientHash;
             try
             {
@@ -150,6 +154,7 @@ namespace Client.Envir
         }
         public void Process(G.GoodVersion p)
         {
+            Console.WriteLine($"[WS-DIAG] CConnection.Process(G.GoodVersion): key set, DB version='{p.SystemDatabaseVersion}', calling LoadDatabase");
             Encryption.SetKey(p.DatabaseKey);
             CEnvir.ServerSystemDatabaseVersion = p.SystemDatabaseVersion;
 

@@ -80,11 +80,15 @@ namespace Library.Network
                     Buffer.BlockCopy(_recvBuf, 0, _rawData, temp.Length, dataRead);
 
                     Packet p;
+                    int parsed = 0;
                     while ((p = Packet.ReceivePacket(_rawData, out _rawData)) != null)
                     {
                         ReceiveList.Enqueue(p);
                         TotalPacketsProcessed++;
+                        parsed++;
                     }
+                    if (dataRead > 0 && parsed == 0)
+                        Console.WriteLine($"[WS-DIAG] PumpReceive: read {dataRead} bytes but parsed 0 packets; rawDataLen={_rawData.Length}; firstBytes={BitConverter.ToString(_rawData, 0, Math.Min(_rawData.Length, 16))}");
                 }
             }
             catch (Exception ex)

@@ -39,7 +39,10 @@ namespace MirDB
             if (Type == null)
             {
                 typeName = typeName.Replace("Server.DBModels", "Library.SystemModels");
-                Type = Assembly.GetEntryAssembly().GetType(typeName) ?? Assembly.GetCallingAssembly().GetType(typeName);
+                // 浏览器 WASM 下 Assembly.GetEntryAssembly() 返回 null，且类型未必在传入的 Assemblies 中；
+                // 改为在传入 Assemblies 与所有已加载程序集里查找。
+                Type = Assemblies.Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null)
+                      ?? AppDomain.CurrentDomain.GetAssemblies().Select(x => x.GetType(typeName)).FirstOrDefault(x => x != null);
             }
 
             int count = reader.ReadInt32();

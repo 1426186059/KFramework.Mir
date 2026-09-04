@@ -20,16 +20,23 @@ namespace Client.Network
 
         public void Connect(string host, int port)
         {
+            Console.WriteLine($"[WS-DIAG] JsWebSocketTransport.Connect ws://{host}:{port}/");
             _instanceId = BrowserWebSocket.Connect($"ws://{host}:{port}/");
+            Console.WriteLine($"[WS-DIAG] JsWebSocketTransport.Connect => instanceId={_instanceId}");
         }
 
         public void Send(byte[] buffer, int offset, int count)
         {
-            if (_instanceId <= 0 || count <= 0) return;
+            if (_instanceId <= 0 || count <= 0)
+            {
+                Console.WriteLine($"[WS-DIAG] JsWebSocketTransport.Send skipped: id={_instanceId} count={count}");
+                return;
+            }
 
             byte[] slice = new byte[count];
             Buffer.BlockCopy(buffer, offset, slice, 0, count);
-            BrowserWebSocket.Send(_instanceId, slice);
+            int r = BrowserWebSocket.Send(_instanceId, slice);
+            Console.WriteLine($"[WS-DIAG] JsWebSocketTransport.Send: id={_instanceId} len={count} result={r}");
         }
 
         public int Receive(byte[] buffer)
@@ -42,6 +49,7 @@ namespace Client.Network
                 if (msg == null || msg.Length == 0) return 0;
                 _retained = msg;
                 _retainedOffset = 0;
+                Console.WriteLine($"[WS-DIAG] JsWebSocketTransport.Receive: new msg len={msg.Length}");
             }
 
             int n = Math.Min(_retained.Length - _retainedOffset, buffer.Length);
@@ -52,6 +60,7 @@ namespace Client.Network
 
         public void Disconnect()
         {
+            Console.WriteLine($"[WS-DIAG] JsWebSocketTransport.Disconnect: id={_instanceId}");
             if (_instanceId > 0)
             {
                 BrowserWebSocket.Close(_instanceId);

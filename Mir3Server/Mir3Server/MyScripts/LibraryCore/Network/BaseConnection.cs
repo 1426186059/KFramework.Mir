@@ -86,6 +86,7 @@ namespace Library.Network
 
                 if (dataRead == 0)
                 {
+                    Console.WriteLine($"[WS-DIAG] BaseConnection.ReceiveData: 0 bytes read -> remote closed, Disconnecting");
                     Disconnecting = true;
                     return;
                 }
@@ -120,6 +121,7 @@ namespace Library.Network
         }
         private void BeginSend(List<byte> data)
         {
+            Console.WriteLine($"[WS-DIAG] BaseConnection.BeginSend entry: data.Count={data.Count}, Connected={Connected}, Sending={Sending}");
             if (!Connected || data.Count == 0) return;
 
             try
@@ -131,6 +133,7 @@ namespace Library.Network
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[WS-DIAG] BaseConnection.BeginSend exception: {ex.GetType().Name}: {ex.Message}");
                 if (AdditionalLogging)
                     OnException(this, ex);
                 Disconnecting = true;
@@ -147,6 +150,7 @@ namespace Library.Network
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"[WS-DIAG] BaseConnection.SendData exception: {ex.GetType().Name}: {ex.Message}");
                 if (AdditionalLogging)
                     OnException(this, ex);
                 Disconnecting = true;
@@ -228,6 +232,7 @@ namespace Library.Network
         {
             if (Stream == null)
             {
+                Console.WriteLine($"[WS-DIAG] BaseConnection.Process: Stream==null -> TryDisconnect");
                 TryDisconnect();
                 return;
             }
@@ -255,6 +260,7 @@ namespace Library.Network
 
             if (Time.Now >= TimeOutTime)
             {
+                Console.WriteLine($"[WS-DIAG] BaseConnection.Process: timeout reached -> disconnect (TimeOutTime={TimeOutTime})");
                 if (!Disconnecting)
                     TrySendDisconnect(new G.Disconnect { Reason = DisconnectReason.TimedOut });
                 else

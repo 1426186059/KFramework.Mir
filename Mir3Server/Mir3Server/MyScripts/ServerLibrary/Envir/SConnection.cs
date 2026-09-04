@@ -39,6 +39,8 @@ namespace Server.Envir
 
         public StringMessages Language;
 
+        private bool _diagProcessLogged;
+
         public SConnection(Stream stream, string ipAddress) : base(stream)
         {
             IPAddress = ipAddress;
@@ -169,6 +171,12 @@ namespace Server.Envir
 
         public override void Process()
         {
+            if (!_diagProcessLogged)
+            {
+                _diagProcessLogged = true;
+                Console.WriteLine($"[WS-DIAG] SConnection.Process first call: Connected={Connected}, SendList={SendList?.Count ?? -1}, Sending={Sending}, Stage={Stage}");
+            }
+
             if (SEnvir.Now >= PingTime && !PingSent && Stage != GameStage.None)
             {
                 PingTime = SEnvir.Now;
@@ -264,13 +272,16 @@ namespace Server.Envir
         }
         public void Process(G.Disconnect p)
         {
+            Console.WriteLine($"[WS-DIAG] SConnection.Process(G.Disconnect): setting Disconnecting");
             Disconnecting = true;
         }
         public void Process(G.Connected p)
         {
+            Console.WriteLine($"[WS-DIAG] SConnection.Process(G.Connected): CheckVersion={Config.CheckVersion}");
             if (Config.CheckVersion)
             {
                 Enqueue(new G.CheckVersion());
+                Console.WriteLine($"[WS-DIAG]   -> enqueued G.CheckVersion");
                 return;
             }
 
@@ -280,9 +291,11 @@ namespace Server.Envir
                 DatabaseKey = Config.EncryptionEnabled ? SEnvir.CryptoKey : null,
                 SystemDatabaseVersion = SEnvir.Session?.RefreshSystemVersion(),
             });
+            Console.WriteLine($"[WS-DIAG]   -> enqueued G.GoodVersion (no version check)");
         }
         public void Process(G.Version p)
         {
+            Console.WriteLine($"[WS-DIAG] SConnection.Process(G.Version): Stage={Stage}, ClientHashConfigured={(Config.ClientHash != null && Config.ClientHash.Length > 0)}, ClientHashLen={(p.ClientHash?.Length ?? 0)}");
             if (Stage != GameStage.None) return;
 
             // 未配置强制客户端哈希（开发期未放置 Zircon.dll，ClientHash 为 null）时跳过版本校验，
@@ -290,6 +303,7 @@ namespace Server.Envir
             if (Config.ClientHash != null && Config.ClientHash.Length > 0 && !Functions.IsMatch(Config.ClientHash, p.ClientHash))
             {
                 SendDisconnect(new G.Disconnect { Reason = DisconnectReason.WrongVersion });
+                Console.WriteLine($"[WS-DIAG]   -> SendDisconnect(WrongVersion)");
                 return;
             }
 
@@ -299,6 +313,7 @@ namespace Server.Envir
                 DatabaseKey = Config.EncryptionEnabled ? SEnvir.CryptoKey : null,
                 SystemDatabaseVersion = SEnvir.Session?.RefreshSystemVersion(),
             });
+            Console.WriteLine($"[WS-DIAG]   -> enqueued G.GoodVersion");
         }
         public void Process(G.Ping p)
         {

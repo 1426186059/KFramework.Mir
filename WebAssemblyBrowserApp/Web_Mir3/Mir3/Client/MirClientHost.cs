@@ -63,7 +63,19 @@ public static partial class MirClientHost
             MirLibrary.DrawCounted = () => CEnvir.DPSCounter++;
             MirLibrary.GetBytesFromUrl = MirEngine.BrowserResource.GetBytes;
             // 数据库配置表（System.db / Users.db）与库/地图同走 HTTP 取字节；Session 内部按文件名映射到 MyRes/Data/。
-            Session.DatabaseBytesLoader = path => MirEngine.BrowserResource.GetBytes("MyRes/Data/" + System.IO.Path.GetFileName(path));
+            // 用 GetFileName 仅取文件名，避免把 ".\Data\System.db" 这类相对路径拼进 URL（会 404）。
+            Session.DatabaseBytesLoader = path =>
+            {
+                // WASM 运行时 Path 按 Unix 语义：反斜杠 \ 不是分隔符，GetFileName 不会剥离 ".\Data\" 前缀。
+                // 故手动按 / 和 \ 两种分隔符取末段文件名。
+                var name = path;
+                var idx = name.LastIndexOfAny(new char[] { '/', '\\' });
+                if (idx >= 0) name = name.Substring(idx + 1);
+                if (string.IsNullOrEmpty(name)) name = "System.db";
+                var url = "MyRes/Data/" + name;
+                System.Console.WriteLine("[DB-LOADER] path='" + path + "' -> url='" + url + "'");
+                return MirEngine.BrowserResource.GetBytes(url);
+            };
             CEnvir.SaveChatLogLine = text => MirEngine.BrowserStorage.AppendText("mir_chat_log", text);
 
             LoadLibraries();
