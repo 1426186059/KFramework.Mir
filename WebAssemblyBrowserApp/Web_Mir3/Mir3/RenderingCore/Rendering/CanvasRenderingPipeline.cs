@@ -10,13 +10,13 @@ using Shared.Rendering;
 namespace Shared.Rendering
 {
     /// <summary>
-    /// HTML5 Canvas 渲染管线：以 CanvasRenderer（main.js 的 mir.cr*）为后端实现 IRenderingPipeline。
+    /// HTML5 Canvas 渲染管线：以 BrowserCanvas（main.js 的 mir.cr*）为后端实现 IRenderingPipeline。
     /// 所有绘制目标/纹理用 int 句柄标识（0=主画布，其余=JS 端 Image 或离屏 canvas）。
     /// </summary>
     public sealed class CanvasRenderingPipeline : IRenderingPipeline
     {
         private RenderingPipelineContext _context;
-        private int _currentSurfaceId = CanvasRenderer.MainTarget;
+        private int _currentSurfaceId = BrowserCanvas.MainTarget;
         private Size _backBufferSize = new Size(1024, 768);
 
         // 真实 Zircon 客户端（MirLibrary/MirImage）通过 CreateTexture + LockTexture + Marshal.Copy 上传像素，
@@ -46,7 +46,7 @@ namespace Shared.Rendering
         public void Initialize(RenderingPipelineContext context)
         {
             _context = context;
-            CanvasRenderer.SetTarget(CanvasRenderer.MainTarget);
+            BrowserCanvas.SetTarget(BrowserCanvas.MainTarget);
         }
 
         public void RunMessageLoop(Action loop)
@@ -56,9 +56,9 @@ namespace Shared.Rendering
 
         public bool RenderFrame(Action drawScene)
         {
-            CanvasRenderer.SetTarget(CanvasRenderer.MainTarget);
+            BrowserCanvas.SetTarget(BrowserCanvas.MainTarget);
             drawScene();
-            CanvasRenderer.Flush();
+            BrowserCanvas.Flush();
             return true;
         }
 
@@ -76,11 +76,11 @@ namespace Shared.Rendering
         public IReadOnlyList<GraphicsAdapterInfo> GetGraphicsAdapters(string pipelineId) => Array.Empty<GraphicsAdapterInfo>();
 
         public Size MeasureText(string text, System.Drawing.Font font)
-            => CanvasRenderer.MeasureText(text, ToCss(font), 0);
+            => BrowserCanvas.MeasureText(text, ToCss(font), 0);
         public Size MeasureText(string text, System.Drawing.Font font, Size proposedSize)
-            => CanvasRenderer.MeasureText(text, ToCss(font), proposedSize.Width);
+            => BrowserCanvas.MeasureText(text, ToCss(font), proposedSize.Width);
         public Size MeasureText(string text, System.Drawing.Font font, Size proposedSize, System.Windows.Forms.TextFormatFlags flags)
-            => CanvasRenderer.MeasureText(text, ToCss(font), proposedSize.Width);
+            => BrowserCanvas.MeasureText(text, ToCss(font), proposedSize.Width);
 
         private static string ToCss(System.Drawing.Font font)
             => font == null ? "12px sans-serif" : new MirEngine.Font(font.Name, font.Size).ToCss();
@@ -128,7 +128,7 @@ namespace Shared.Rendering
             if (points == null || points.Count < 2) return;
             int argb = colour.ToArgb();
             for (int i = 0; i + 1 < points.Count; i++)
-                CanvasRenderer.DrawLine(points[i].X, points[i].Y, points[i + 1].X, points[i + 1].Y, _lineWidth, argb);
+                BrowserCanvas.DrawLine(points[i].X, points[i].Y, points[i + 1].X, points[i + 1].Y, _lineWidth, argb);
         }
 
         public void FlushLines() { }
@@ -137,7 +137,7 @@ namespace Shared.Rendering
         {
             if (!texture.IsValid) return;
             int id = (int)texture.NativeHandle;
-            CanvasRenderer.DrawImage(id, sourceRectangle.X, sourceRectangle.Y, sourceRectangle.Width, sourceRectangle.Height,
+            BrowserCanvas.DrawImage(id, sourceRectangle.X, sourceRectangle.Y, sourceRectangle.Width, sourceRectangle.Height,
                 destinationRectangle.X, destinationRectangle.Y, destinationRectangle.Width, destinationRectangle.Height, colour.ToArgb());
         }
 
@@ -146,7 +146,7 @@ namespace Shared.Rendering
             if (!texture.IsValid) return;
             int id = (int)texture.NativeHandle;
             Rectangle src = sourceRectangle ?? new Rectangle(0, 0, _backBufferSize.Width, _backBufferSize.Height);
-            CanvasRenderer.DrawImage(id, src.X, src.Y, src.Width, src.Height, translation.X, translation.Y, src.Width, src.Height, colour.ToArgb());
+            BrowserCanvas.DrawImage(id, src.X, src.Y, src.Width, src.Height, translation.X, translation.Y, src.Width, src.Height, colour.ToArgb());
         }
 
         public void BeginSpriteBatch() { }
@@ -159,25 +159,25 @@ namespace Shared.Rendering
         {
             if (!surface.IsValid) return;
             _currentSurfaceId = (int)surface.NativeHandle;
-            CanvasRenderer.SetTarget(_currentSurfaceId);
+            BrowserCanvas.SetTarget(_currentSurfaceId);
         }
-        public RenderSurface GetScratchSurface() => RenderSurface.From(CanvasRenderer.MainTarget);
-        public RenderTexture GetScratchTexture() => RenderTexture.From(CanvasRenderer.MainTarget);
+        public RenderSurface GetScratchSurface() => RenderSurface.From(BrowserCanvas.MainTarget);
+        public RenderTexture GetScratchTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
 
         public void ColorFill(RenderSurface surface, Rectangle rectangle, Color colorFill)
         {
             if (!surface.IsValid) return;
             int prev = _currentSurfaceId;
             _currentSurfaceId = (int)surface.NativeHandle;
-            CanvasRenderer.SetTarget(_currentSurfaceId);
-            CanvasRenderer.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colorFill.ToArgb());
+            BrowserCanvas.SetTarget(_currentSurfaceId);
+            BrowserCanvas.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colorFill.ToArgb());
             _currentSurfaceId = prev;
-            CanvasRenderer.SetTarget(prev);
+            BrowserCanvas.SetTarget(prev);
         }
 
         public RenderTargetResource CreateRenderTarget(Size size)
         {
-            int id = CanvasRenderer.CreateOffscreen(Math.Max(1, size.Width), Math.Max(1, size.Height));
+            int id = BrowserCanvas.CreateOffscreen(Math.Max(1, size.Width), Math.Max(1, size.Height));
             return RenderTargetResource.From(RenderTexture.From(id), RenderSurface.From(id));
         }
         public void ReleaseRenderTarget(RenderTargetResource renderTarget) { }
@@ -186,7 +186,7 @@ namespace Shared.Rendering
 
         public void Clear(RenderClearFlags flags, Color colour, float z, int stencil, params Rectangle[] regions)
         {
-            CanvasRenderer.Clear(colour.R, colour.G, colour.B, colour.A);
+            BrowserCanvas.Clear(colour.R, colour.G, colour.B, colour.A);
         }
 
         public void FlushSprite() { }
@@ -208,7 +208,7 @@ namespace Shared.Rendering
             int id = (int)texture.NativeHandle;
             _textureSizes.Remove(id);
             _textureFormats.Remove(id);
-            CanvasRenderer.DisposeImage(id);
+            BrowserCanvas.DisposeImage(id);
         }
 
         public TextureLock LockTexture(RenderTexture texture, TextureLockMode mode)
@@ -249,7 +249,7 @@ namespace Shared.Rendering
                         rgba = buffer;
                     }
 
-                    CanvasRenderer.UploadImage(id, rgba, w, h);
+                    BrowserCanvas.UploadImage(id, rgba, w, h);
                 }
                 catch
                 {
@@ -267,11 +267,11 @@ namespace Shared.Rendering
 
         public void MemoryClear() { }
 
-        public RenderTexture GetColourPaletteTexture() => RenderTexture.From(CanvasRenderer.MainTarget);
+        public RenderTexture GetColourPaletteTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
         public byte[] GetColourPaletteData() => Array.Empty<byte>();
-        public RenderTexture GetLightTexture() => RenderTexture.From(CanvasRenderer.MainTarget);
+        public RenderTexture GetLightTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
         public Size GetLightTextureSize() => new Size(1, 1);
-        public RenderTexture GetPoisonTexture() => RenderTexture.From(CanvasRenderer.MainTarget);
+        public RenderTexture GetPoisonTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
         public Size GetPoisonTextureSize() => new Size(1, 1);
 
         public TextureFilterMode GetTextureFilter() => _textureFilter;

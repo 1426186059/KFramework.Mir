@@ -35,14 +35,14 @@ namespace Client.Envir
             if (Loop && _activeId != 0) return;
 
             string url = "MyRes/Sound/" + Path.GetFileName(FileName);
-            _activeId = MirClientHost.PlaySound(url, Volume, Loop);
+            _activeId = MirEngine.BrowserAudio.PlaySound(url, Volume, Loop);
         }
 
         public void Stop()
         {
             if (_activeId != 0)
             {
-                MirClientHost.StopSound(_activeId);
+                MirEngine.BrowserAudio.StopSound(_activeId);
                 _activeId = 0;
             }
         }
@@ -58,7 +58,7 @@ namespace Client.Envir
             Volume = DXSoundManager.GetVolume(SoundType);
 
             if (_activeId != 0)
-                MirClientHost.SetSoundVolume(_activeId, Volume);
+                MirEngine.BrowserAudio.SetSoundVolume(_activeId, Volume);
         }
 
         public void UpdateFlags()

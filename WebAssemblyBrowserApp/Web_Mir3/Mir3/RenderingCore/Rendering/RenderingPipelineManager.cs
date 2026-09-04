@@ -556,7 +556,7 @@ namespace Shared.Rendering
                 return;
 
             // HTML5 Canvas 直接填充矩形（无需中间白纹理）
-            CanvasRenderer.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colour.ToArgb());
+            BrowserCanvas.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colour.ToArgb());
         }
 
         public static RenderTargetResource CreateRenderTarget(Size size)

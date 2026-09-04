@@ -8,6 +8,8 @@ namespace MirClient.Rendering;
 /// 两种互操作模式（可运行时切换，用于性能对比）：
 ///   - 直调模式：每次 Draw 都跨 C#/JS 边界一次调用；
 ///   - 批命令模式：C# 侧把绘制指令写入 int 缓冲，每帧只做一次跨边界调用。
+///
+/// 对应 jsengine/render/canvas/canvas2d.js（mir.createImage / drawImage / drawBatch / fillRect / drawText / measureText / clear / setStatus）。
 /// </summary>
 internal static partial class MirCanvas
 {

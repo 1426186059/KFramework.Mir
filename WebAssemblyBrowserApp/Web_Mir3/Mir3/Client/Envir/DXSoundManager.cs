@@ -1062,7 +1062,7 @@ namespace Client.Envir
             try
             {
                 // WASM：用 Web Audio 后端（见 MirClientHost 音频方法 / main.js mir.playSound）
-                MirClientHost.InitAudio();
+                MirEngine.BrowserAudio.InitAudio();
                 AdjustVolume();
             }
             catch (Exception ex)
@@ -1095,7 +1095,7 @@ namespace Client.Envir
         public static void StopAllSounds()
         {
             // WASM：直接清空 JS 端所有活动音源
-            MirClientHost.StopAllSounds();
+            MirEngine.BrowserAudio.StopAllSounds();
         }
         public static void AdjustVolume()
         {
@@ -1138,7 +1138,7 @@ namespace Client.Envir
 
         public static void Unload()
         {
-            MirClientHost.StopAllSounds();
+            MirEngine.BrowserAudio.StopAllSounds();
 
             if (Device != null)
             {

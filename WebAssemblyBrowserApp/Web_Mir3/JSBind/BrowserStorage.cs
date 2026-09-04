@@ -4,7 +4,7 @@ using System.Runtime.InteropServices.JavaScript;
 namespace MirEngine;
 
 /// <summary>
-/// 浏览器端持久化（localStorage）互操作，对应 main.js 的 mir.storage* 函数。
+/// 浏览器端持久化（localStorage）互操作，对应 jsengine/core/storage.js（mir.storage* 函数）。
 /// 用于在 WASM 下等价替代桌面端写磁盘的行为（如聊天日志持久化）。
 /// </summary>
 internal static partial class BrowserStorage

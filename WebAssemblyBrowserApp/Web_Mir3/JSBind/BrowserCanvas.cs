@@ -7,9 +7,9 @@ namespace MirEngine;
 /// <summary>
 /// HTML5 Canvas 渲染后端（JS interop）。每个绘制目标/纹理用 int 句柄标识：
 /// 0 = 主画布，&gt;0 = JS 端的 Image（精灵）或离屏 canvas（RenderTarget）。
-/// 对应 main.js 的 mir.cr* 函数。
+/// 对应 jsengine/render/canvas/canvas-engine.js（mir.cr* 函数）。
 /// </summary>
-internal static partial class CanvasRenderer
+internal static partial class BrowserCanvas
 {
     public const int MainTarget = 0;
 

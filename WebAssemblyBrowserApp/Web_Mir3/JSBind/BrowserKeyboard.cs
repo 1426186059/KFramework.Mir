@@ -6,49 +6,24 @@ using System.Windows.Forms;
 namespace MirEngine;
 
 /// <summary>
-/// 浏览器键鼠输入封装（对应 main.js 的 mir.input*）。
-/// JS 的 DOM 事件经 mir.inputAttach 注册后，回调本类的 [JSExport] 入口，
-/// 翻译成 WinForms 风格的事件参数（System.Windows.Forms.*）并抛出 C# 事件，
-/// 由游戏层（MirClientHost）订阅后路由到 DXControl.ActiveScene。
-/// 这样裸 DOM 事件处理全部收口到 JS 绑定层，游戏代码只消费强类型的 C# 事件。
+/// 浏览器键盘输入封装。对应 jsengine/core/keyboard.js（mir.keyboardAttach / keyboardDetach）。
+/// JS DOM 的 keydown / keyup 经 mir.keyboardAttach 注册后，回调本类的 [JSExport] 入口，
+/// 翻译成 WinForms 风格 KeyEventArgs / KeyPressEventArgs 并抛出 C# 事件，由游戏层订阅。
 /// </summary>
-public static partial class BrowserInput
+public static partial class BrowserKeyboard
 {
-    // ---- DOM 监听注册（由 C# 调用，经 JSImport 落到 main.js 的 mir.inputAttach/Detach）----
-    [JSImport("mir.inputAttach", "main.js")]
-    private static partial void InputAttachImpl();
+    [JSImport("mir.keyboardAttach", "main.js")]
+    private static partial void KeyboardAttachImpl();
 
-    [JSImport("mir.inputDetach", "main.js")]
-    private static partial void InputDetachImpl();
+    [JSImport("mir.keyboardDetach", "main.js")]
+    private static partial void KeyboardDetachImpl();
 
-    public static void Attach() => InputAttachImpl();
-    public static void Detach() => InputDetachImpl();
+    public static void Attach() => KeyboardAttachImpl();
+    public static void Detach() => KeyboardDetachImpl();
 
-    // ---- C# 事件（游戏层订阅）----
-    public static event EventHandler<MouseEventArgs> MouseDown;
-    public static event EventHandler<MouseEventArgs> MouseMove;
-    public static event EventHandler<MouseEventArgs> MouseUp;
-    public static event EventHandler<MouseEventArgs> MouseWheel;
     public static event EventHandler<KeyEventArgs> KeyDown;
     public static event EventHandler<KeyEventArgs> KeyUp;
     public static event EventHandler<KeyPressEventArgs> KeyPress;
-
-    // ---- JS DOM 事件入口（main.js 监听后回调，参数为裸 DOM 值）----
-    [JSExport]
-    public static void OnMouseDown(int button, int x, int y)
-        => MouseDown?.Invoke(null, new MouseEventArgs((System.Windows.Forms.MouseButtons)button, 1, x, y, 0));
-
-    [JSExport]
-    public static void OnMouseMove(int x, int y)
-        => MouseMove?.Invoke(null, new MouseEventArgs(System.Windows.Forms.MouseButtons.None, 0, x, y, 0));
-
-    [JSExport]
-    public static void OnMouseUp(int button, int x, int y)
-        => MouseUp?.Invoke(null, new MouseEventArgs((System.Windows.Forms.MouseButtons)button, 1, x, y, 0));
-
-    [JSExport]
-    public static void OnMouseWheel(int delta, int x, int y)
-        => MouseWheel?.Invoke(null, new MouseEventArgs(System.Windows.Forms.MouseButtons.None, 0, x, y, delta));
 
     [JSExport]
     public static void OnKeyDown(string key)
@@ -73,14 +48,14 @@ public static partial class BrowserInput
         KeyPress?.Invoke(null, new KeyPressEventArgs(key[0]));
     }
 
-    // ---- 键名 -> Keys 枚举（复刻原 MirClientHost.ToKeys）----
+    // ---- 键名 -> Keys 枚举 ----
     private static readonly Dictionary<string, System.Windows.Forms.Keys> SpecialKeys = new Dictionary<string, System.Windows.Forms.Keys>(StringComparer.OrdinalIgnoreCase)
     {
         { "arrowup", System.Windows.Forms.Keys.Up }, { "arrowdown", System.Windows.Forms.Keys.Down },
         { "arrowleft", System.Windows.Forms.Keys.Left }, { "arrowright", System.Windows.Forms.Keys.Right },
         { "escape", System.Windows.Forms.Keys.Escape }, { "enter", System.Windows.Forms.Keys.Return },
         { "return", System.Windows.Forms.Keys.Return }, { "tab", System.Windows.Forms.Keys.Tab },
-        { " ", System.Windows.Forms.Keys.Space }, { "spacebar", System.Windows.Forms.Keys.Space },
+        { " " , System.Windows.Forms.Keys.Space }, { "spacebar", System.Windows.Forms.Keys.Space },
         { "backspace", System.Windows.Forms.Keys.Back }, { "delete", System.Windows.Forms.Keys.Delete },
         { "shift", System.Windows.Forms.Keys.ShiftKey }, { "control", System.Windows.Forms.Keys.ControlKey },
         { "alt", System.Windows.Forms.Keys.Menu },

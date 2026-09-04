@@ -26,35 +26,7 @@ public static partial class MirClientHost
 {
     private static bool _ready;
 
-    [JSImport("mir.getBytes", "main.js")]
-    private static partial byte[] GetBytesImpl(string url);
-
-    [JSImport("mir.log", "main.js")]
-    private static partial void LogImpl(string message);
-
-    [JSImport("mir.initAudio", "main.js")]
-    private static partial void InitAudioImpl();
-
-    [JSImport("mir.playSound", "main.js")]
-    private static partial int PlaySoundImpl(string url, int volume, bool loop);
-
-    [JSImport("mir.stopSound", "main.js")]
-    private static partial void StopSoundImpl(int id);
-
-    [JSImport("mir.stopAllSounds", "main.js")]
-    private static partial void StopAllSoundsImpl();
-
-    [JSImport("mir.setSoundVolume", "main.js")]
-    private static partial void SetSoundVolumeImpl(int id, int volume);
-
-    private static byte[] GetBytes(string url) => GetBytesImpl(url);
-    private static void MirLog(string message) => LogImpl(message);
-
-    public static void InitAudio() => InitAudioImpl();
-    public static int PlaySound(string url, int volume, bool loop) => PlaySoundImpl(url, volume, loop);
-    public static void StopSound(int id) => StopSoundImpl(id);
-    public static void StopAllSounds() => StopAllSoundsImpl();
-    public static void SetSoundVolume(int id, int volume) => SetSoundVolumeImpl(id, volume);
+    private static void MirLog(string message) => MirEngine.BrowserResource.Log(message);
 
     // ===================== 生命周期 =====================
 
@@ -88,7 +60,7 @@ public static partial class MirClientHost
             MirLibrary.GetCacheDuration = () => Config.CacheDuration;
             MirLibrary.GetUseZlAtlasPages = () => Config.UseZlAtlasPages;
             MirLibrary.DrawCounted = () => CEnvir.DPSCounter++;
-            MirLibrary.GetBytesFromUrl = GetBytes;
+            MirLibrary.GetBytesFromUrl = MirEngine.BrowserResource.GetBytes;
             CEnvir.SaveChatLogLine = text => MirEngine.BrowserStorage.AppendText("mir_chat_log", text);
 
             LoadLibraries();
@@ -100,7 +72,7 @@ public static partial class MirClientHost
             Config.GameSize = new Size(1024, 768);
             Config.LimitFPS = false; // 浏览器主线程不可 Sleep
             Config.MapPath = "MyRes/Map/";
-            MapControl.MapBytesLoader = f => GetBytes(Config.MapPath + f);
+            MapControl.MapBytesLoader = f => MirEngine.BrowserResource.GetBytes(Config.MapPath + f);
 
             string requested = RenderingPipelineManager.NormalizePipelineId("Canvas");
             if (!string.Equals(Config.RenderingPipeline, requested, StringComparison.OrdinalIgnoreCase))
@@ -167,36 +139,38 @@ public static partial class MirClientHost
     }
 
     // ===================== 输入 =====================
-    // 浏览器键鼠输入统一经 JSBind/BrowserInput 封装：DOM 事件 -> WinForms 风格 EventArgs -> C# 事件，
-    // 此处仅做订阅与路由（复刻原 On* 的行为：设置 MouseLocation 并转发到 ActiveScene）。
+    // 浏览器键鼠输入统一经 JSBind/BrowserKeyboard + BrowserMouse 封装：
+    // DOM 事件 -> WinForms 风格 EventArgs -> C# 事件，此处仅做订阅与路由
+    // （复刻原 On* 的行为：设置 MouseLocation 并转发到 ActiveScene）。
 
     private static void ConfigureInput()
     {
-        MirEngine.BrowserInput.Attach();
+        MirEngine.BrowserKeyboard.Attach();
+        MirEngine.BrowserMouse.Attach();
 
-        MirEngine.BrowserInput.MouseDown += (s, e) =>
+        MirEngine.BrowserMouse.MouseDown += (s, e) =>
         {
             CEnvir.MouseLocation = new Point(e.X, e.Y);
             DXControl.ActiveScene?.OnMouseDown(e);
         };
-        MirEngine.BrowserInput.MouseMove += (s, e) =>
+        MirEngine.BrowserMouse.MouseMove += (s, e) =>
         {
             CEnvir.MouseLocation = new Point(e.X, e.Y);
             DXControl.ActiveScene?.OnMouseMove(e);
         };
-        MirEngine.BrowserInput.MouseUp += (s, e) =>
+        MirEngine.BrowserMouse.MouseUp += (s, e) =>
         {
             DXControl.ActiveScene?.OnMouseUp(e);
             DXControl.ActiveScene?.OnMouseClick(e);
         };
-        MirEngine.BrowserInput.MouseWheel += (s, e) =>
+        MirEngine.BrowserMouse.MouseWheel += (s, e) =>
         {
             CEnvir.MouseLocation = new Point(e.X, e.Y);
             DXControl.ActiveScene?.OnMouseWheel(e);
         };
-        MirEngine.BrowserInput.KeyDown += (s, e) => DXControl.ActiveScene?.OnKeyDown(e);
-        MirEngine.BrowserInput.KeyUp += (s, e) => DXControl.ActiveScene?.OnKeyUp(e);
-        MirEngine.BrowserInput.KeyPress += (s, e) => DXControl.ActiveScene?.OnKeyPress(e);
+        MirEngine.BrowserKeyboard.KeyDown += (s, e) => DXControl.ActiveScene?.OnKeyDown(e);
+        MirEngine.BrowserKeyboard.KeyUp += (s, e) => DXControl.ActiveScene?.OnKeyUp(e);
+        MirEngine.BrowserKeyboard.KeyPress += (s, e) => DXControl.ActiveScene?.OnKeyPress(e);
     }
 
     // ===================== 渲染宿主设置（复刻 Client/Program.cs 的 CreateRenderingHostSettings）=====================

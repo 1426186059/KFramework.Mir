@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <!-- 浏览器 WASM 无 DirectX / Vulkan：这些硬件管线无法使用，渲染由
-         Mir3/RenderingCore/Rendering/CanvasRenderingPipeline.cs + JSBind/CanvasRenderer.cs 接管。 -->
+         Mir3/RenderingCore/Rendering/CanvasRenderingPipeline.cs + JSBind/BrowserCanvas.cs 接管。 -->
     <Compile Remove="Mir3\RenderingCore\Rendering\SharpDXD3D9\**" />
     <Compile Remove="Mir3\RenderingCore\Rendering\SharpDXD3D11\**" />
     <Compile Remove="Mir3\RenderingCore\Rendering\SilkD3D11\**" />
