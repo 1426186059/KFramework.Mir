@@ -1,26 +1,29 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using MirEngine;
+using Shared.Rendering;
 
 namespace Shared.Rendering
 {
+    /// <summary>
+    /// 渲染管线管理器（WASM / HTML5 Canvas 适配版）。
+    /// 原版 Zircon 此文件依赖 DirectX（SilkD3D11/SilkVulkan）、WinForms（Control/Form/Screen/TextRenderer）
+    /// 与 System.Drawing.Graphics，均无法在浏览器运行；此处改为单一 Canvas 管线，所有公开方法委托给
+    /// <see cref="CanvasRenderingPipeline"/>，API 表面与原版保持一致，便于后续逐步移植调用方。
+    /// </summary>
     public static class RenderingPipelineManager
     {
-        private const string DefaultPipelineId = RenderingPipelineIds.SilkDXD3D11;
+        private const string DefaultPipelineId = "Canvas";
         private static readonly Dictionary<string, Func<IRenderingPipeline>> PipelineFactories = new(StringComparer.OrdinalIgnoreCase)
         {
-            { RenderingPipelineIds.SilkDXD3D11, () => new SilkD3D11.SilkD3D11RenderingPipeline() },
-            { RenderingPipelineIds.SilkVulkan, () => new SilkVulkan.SilkVulkanRenderingPipeline() }
+            { DefaultPipelineId, () => new CanvasRenderingPipeline() },
         };
 
         private static IRenderingPipeline _activePipeline;
         private static RenderingPipelineContext _context;
         private static PipelineSession _activeSession;
-        private static readonly Graphics FallbackGraphics;
         private static readonly List<ITextureCacheItem> FallbackControlCache = new();
         private static readonly List<ITextureCacheItem> FallbackTextureCache = new();
         private static readonly List<ISoundCacheItem> FallbackSoundCache = new();
@@ -31,19 +34,11 @@ namespace Shared.Rendering
         private static SpriteShaderEffectRequest? _spriteShaderEffect;
         private static float _fallbackLineWidth = 1F;
         private static TextureFilterMode _fallbackTextureFilter = TextureFilterMode.Point;
-        private static readonly Dictionary<PipelineSession, RenderTexture> SolidFillTextures = new();
-        private static readonly object GraphicsLock = new();
         private static string _pendingPipelineId;
         internal static RenderingHostSettings HostSettings => Settings;
-        internal static Control RenderTarget => _context?.RenderTarget;
+        internal static object RenderTarget => _context?.RenderTarget;
         private static RenderingHostSettings Settings => _context?.Settings ?? DefaultSettings;
         private static readonly RenderingHostSettings DefaultSettings = new();
-
-        static RenderingPipelineManager()
-        {
-            FallbackGraphics = Graphics.FromHwnd(IntPtr.Zero);
-            ConfigureFallbackGraphics(FallbackGraphics);
-        }
 
         public sealed class PipelineSession : IDisposable
         {
@@ -114,127 +109,15 @@ namespace Shared.Rendering
 
         public static IReadOnlyList<DisplayMonitorInfo> GetDisplayMonitors()
         {
-            Screen[] screens = Screen.AllScreens;
-            List<DisplayMonitorInfo> monitors = new(screens.Length);
-
-            for (int i = 0; i < screens.Length; i++)
-            {
-                Screen screen = screens[i];
-                monitors.Add(new DisplayMonitorInfo(i, screen.DeviceName, screen.Primary, screen.Bounds));
-            }
-
-            return monitors;
+            // 浏览器单显示器：返回占位的 1024x768 主显示器
+            return new List<DisplayMonitorInfo> { new(0, "Canvas", true, new Rectangle(0, 0, 1024, 768)) };
         }
 
-        public static int GetSelectedMonitorIndex()
-        {
-            IReadOnlyList<DisplayMonitorInfo> monitors = GetDisplayMonitors();
+        public static int GetSelectedMonitorIndex() => 0;
 
-            if (monitors.Count == 0)
-                return 0;
+        public static DisplayMonitorInfo GetSelectedMonitor() => GetDisplayMonitors()[0];
 
-            if (!string.IsNullOrWhiteSpace(Settings.DefaultMonitor))
-            {
-                DisplayMonitorInfo configuredMonitor = monitors.FirstOrDefault(x => string.Equals(x.DeviceName, Settings.DefaultMonitor, StringComparison.OrdinalIgnoreCase));
-
-                if (configuredMonitor != null)
-                    return configuredMonitor.Index;
-            }
-
-            DisplayMonitorInfo primaryMonitor = monitors.FirstOrDefault(x => x.Primary) ?? monitors[0];
-            Settings.DefaultMonitor = primaryMonitor.DeviceName;
-            return primaryMonitor.Index;
-        }
-
-        public static DisplayMonitorInfo GetSelectedMonitor()
-        {
-            IReadOnlyList<DisplayMonitorInfo> monitors = GetDisplayMonitors();
-
-            if (monitors.Count == 0)
-                return null;
-
-            int index = GetSelectedMonitorIndex();
-
-            if (index < 0 || index >= monitors.Count)
-                index = 0;
-
-            return monitors[index];
-        }
-
-        public static Screen GetSelectedScreen()
-        {
-            Screen[] screens = Screen.AllScreens;
-
-            if (screens.Length == 0)
-                return Screen.PrimaryScreen;
-
-            int index = GetSelectedMonitorIndex();
-
-            if (index < 0 || index >= screens.Length)
-                index = 0;
-
-            return screens[index];
-        }
-
-        public static Rectangle GetSelectedMonitorDisplayBounds()
-        {
-            return GetMonitorDisplayBounds(GetSelectedScreen());
-        }
-
-        public static Rectangle GetMonitorDisplayBounds(Screen screen)
-        {
-            return DisplayModeManager.GetBounds(screen);
-        }
-
-        public static Rectangle GetMonitorDisplayBounds(string deviceName, Rectangle fallbackBounds)
-        {
-            return DisplayModeManager.GetBounds(deviceName, fallbackBounds);
-        }
-
-        public static void SelectMonitor(int monitorIndex)
-        {
-            IReadOnlyList<DisplayMonitorInfo> monitors = GetDisplayMonitors();
-
-            if (monitors.Count == 0)
-                return;
-
-            if (monitorIndex < 0 || monitorIndex >= monitors.Count)
-                monitorIndex = monitors.FirstOrDefault(x => x.Primary)?.Index ?? 0;
-
-            Settings.DefaultMonitor = monitors[monitorIndex].DeviceName;
-            SetTargetMonitor(monitorIndex);
-        }
-
-        public static IReadOnlyList<GraphicsAdapterInfo> GetGraphicsAdapters(string pipelineId)
-        {
-            if (string.Equals(pipelineId, RenderingPipelineIds.SilkVulkan, StringComparison.OrdinalIgnoreCase))
-                return SilkVulkan.SilkVulkanRenderingPipeline.GetAvailableGraphicsAdapters();
-
-            return Array.Empty<GraphicsAdapterInfo>();
-        }
-
-        public static string NormalizePipelineId(string pipelineId)
-        {
-            string requestedId = string.IsNullOrWhiteSpace(pipelineId) ? DefaultPipelineId : pipelineId;
-
-            if (IsDefaultPipelineOnly)
-                return DefaultPipelineId;
-
-            if (!PipelineFactories.ContainsKey(requestedId) && PipelineFactories.ContainsKey(DefaultPipelineId))
-                return DefaultPipelineId;
-
-            return requestedId;
-        }
-
-        public static void RegisterFactory(string pipelineId, Func<IRenderingPipeline> factory)
-        {
-            if (string.IsNullOrWhiteSpace(pipelineId))
-                throw new ArgumentException("Pipeline identifier must be provided.", nameof(pipelineId));
-            if (factory == null)
-                throw new ArgumentNullException(nameof(factory));
-
-            PipelineFactories[pipelineId] = factory;
-        }
+        public static void SelectMonitor(int monitorIndex) => Settings.DefaultMonitor = GetSelectedMonitor().DeviceName;
 
         public static void Initialize(string pipelineId, RenderingPipelineContext context)
         {
@@ -391,30 +274,16 @@ namespace Shared.Rendering
             if (session == null)
                 return;
 
-            if (SolidFillTextures.TryGetValue(session, out RenderTexture solidFillTexture) && solidFillTexture.IsValid)
-            {
-                session.Pipeline.ReleaseTexture(solidFillTexture);
-                SolidFillTextures.Remove(session);
-            }
-
             session.Pipeline.Shutdown();
 
             if (ReferenceEquals(_activeSession, session))
                 SetActiveSession(null);
         }
 
-        public static void RunMessageLoop(Form form, Action loop)
+        public static void RunMessageLoop(Action loop)
         {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            if (form == null)
-                throw new ArgumentNullException(nameof(form));
-
-            if (loop == null)
-                throw new ArgumentNullException(nameof(loop));
-
-            _activePipeline.RunMessageLoop(form, loop);
+            // 浏览器端由 main.js 的 requestAnimationFrame 驱动 game.Frame，无需自启循环
+            loop?.Invoke();
         }
 
         public static bool RenderFrame(Action drawScene)
@@ -425,64 +294,40 @@ namespace Shared.Rendering
             return _activePipeline.RenderFrame(drawScene);
         }
 
-        public static void ToggleFullScreen()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            _activePipeline.ToggleFullScreen();
-        }
-
-        public static void SetResolution(Size size)
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            _activePipeline.SetResolution(size);
-        }
-
-        public static void SetTargetMonitor(int monitorIndex)
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            IReadOnlyList<DisplayMonitorInfo> monitors = GetDisplayMonitors();
-            if (monitorIndex >= 0 && monitorIndex < monitors.Count)
-                Settings.DefaultMonitor = monitors[monitorIndex].DeviceName;
-
-            _activePipeline.SetTargetMonitor(monitorIndex);
-        }
-
-        public static void CenterOnSelectedMonitor()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            _activePipeline.CenterOnSelectedMonitor();
-        }
-
-        public static void ResetDevice()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            _activePipeline.ResetDevice();
-        }
-
-        public static void OnSceneChanged(bool isGameScene)
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            _activePipeline.OnSceneChanged(isGameScene);
-        }
+        public static void ToggleFullScreen() => _activePipeline?.ToggleFullScreen();
+        public static void SetResolution(Size size) => _activePipeline?.SetResolution(size);
+        public static void SetTargetMonitor(int monitorIndex) => _activePipeline?.SetTargetMonitor(monitorIndex);
+        public static void CenterOnSelectedMonitor() => _activePipeline?.CenterOnSelectedMonitor();
+        public static void ResetDevice() => _activePipeline?.ResetDevice();
+        public static void OnSceneChanged(bool isGameScene) => _activePipeline?.OnSceneChanged(isGameScene);
 
         public static IReadOnlyList<Size> GetSupportedResolutions()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
+            => _activePipeline?.GetSupportedResolutions() ?? Array.Empty<Size>();
 
-            return _activePipeline.GetSupportedResolutions();
+        public static IReadOnlyList<GraphicsAdapterInfo> GetGraphicsAdapters(string pipelineId)
+            => Array.Empty<GraphicsAdapterInfo>();
+
+        public static string NormalizePipelineId(string pipelineId)
+        {
+            string requestedId = string.IsNullOrWhiteSpace(pipelineId) ? DefaultPipelineId : pipelineId;
+
+            if (IsDefaultPipelineOnly)
+                return DefaultPipelineId;
+
+            if (!PipelineFactories.ContainsKey(requestedId) && PipelineFactories.ContainsKey(DefaultPipelineId))
+                return DefaultPipelineId;
+
+            return requestedId;
+        }
+
+        public static void RegisterFactory(string pipelineId, Func<IRenderingPipeline> factory)
+        {
+            if (string.IsNullOrWhiteSpace(pipelineId))
+                throw new ArgumentException("Pipeline identifier must be provided.", nameof(pipelineId));
+            if (factory == null)
+                throw new ArgumentNullException(nameof(factory));
+
+            PipelineFactories[pipelineId] = factory;
         }
 
         public static Size MeasureText(string text, Font font)
@@ -490,55 +335,21 @@ namespace Shared.Rendering
             if (_activePipeline != null)
                 return _activePipeline.MeasureText(text, font);
 
-            lock (GraphicsLock)
-            {
-                return TextRenderer.MeasureText(FallbackGraphics, text, font);
-            }
+            return new Size(0, 12);
         }
 
-        public static Size MeasureText(string text, Font font, Size proposedSize, TextFormatFlags format)
+        public static Size MeasureText(string text, Font font, Size proposedSize)
         {
             if (_activePipeline != null)
-                return _activePipeline.MeasureText(text, font, proposedSize, format);
+                return _activePipeline.MeasureText(text, font, proposedSize);
 
-            lock (GraphicsLock)
-            {
-                return TextRenderer.MeasureText(FallbackGraphics, text, font, proposedSize, format);
-            }
+            return new Size(0, 12);
         }
 
-        public static float GetHorizontalDpi()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.GetHorizontalDpi();
-
-            lock (GraphicsLock)
-            {
-                return FallbackGraphics.DpiX;
-            }
-        }
-
-        public static void ConfigureGraphics(Graphics graphics)
-        {
-            if (graphics == null)
-                throw new ArgumentNullException(nameof(graphics));
-
-            if (_activePipeline != null)
-            {
-                _activePipeline.ConfigureGraphics(graphics);
-                return;
-            }
-
-            ConfigureFallbackGraphics(graphics);
-        }
+        public static float GetHorizontalDpi() => _activePipeline?.GetHorizontalDpi() ?? 96F;
 
         public static Color ConvertHslToRgb(float h, float s, float l)
-        {
-            if (_activePipeline != null)
-                return _activePipeline.ConvertHslToRgb(h, s, l);
-
-            return ConvertHslToRgbFallback(h, s, l);
-        }
+            => _activePipeline?.ConvertHslToRgb(h, s, l) ?? Color.Black;
 
         public static void SetOpacity(float opacity)
         {
@@ -551,13 +362,7 @@ namespace Shared.Rendering
             _fallbackOpacity = opacity;
         }
 
-        public static float GetOpacity()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.GetOpacity();
-
-            return _fallbackOpacity;
-        }
+        public static float GetOpacity() => _activePipeline?.GetOpacity() ?? _fallbackOpacity;
 
         public static void SetBlend(bool enabled, float rate = 1F, BlendMode mode = BlendMode.NORMAL)
         {
@@ -572,37 +377,10 @@ namespace Shared.Rendering
             _fallbackBlendMode = mode;
         }
 
-        public static bool IsBlending()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.IsBlending();
-
-            return _fallbackBlending;
-        }
-
-        public static float GetBlendRate()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.GetBlendRate();
-
-            return _fallbackBlendRate;
-        }
-
-        public static BlendMode GetBlendMode()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.GetBlendMode();
-
-            return _fallbackBlendMode;
-        }
-
-        public static float GetLineWidth()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.GetLineWidth();
-
-            return _fallbackLineWidth;
-        }
+        public static bool IsBlending() => _activePipeline?.IsBlending() ?? _fallbackBlending;
+        public static float GetBlendRate() => _activePipeline?.GetBlendRate() ?? _fallbackBlendRate;
+        public static BlendMode GetBlendMode() => _activePipeline?.GetBlendMode() ?? _fallbackBlendMode;
+        public static float GetLineWidth() => _activePipeline?.GetLineWidth() ?? _fallbackLineWidth;
 
         public static void SetLineWidth(float width)
         {
@@ -635,16 +413,8 @@ namespace Shared.Rendering
             _spriteShaderEffect = new SpriteShaderEffectRequest(new DropShadowEffectSettings(colour, width, startOpacity, visibleBounds));
         }
 
-        public static void DisableSpriteShaderEffect()
-        {
-            _spriteShaderEffect = null;
-        }
-
-        public static void DisableOutlineEffect()
-        {
-            DisableSpriteShaderEffect();
-        }
-
+        public static void DisableSpriteShaderEffect() => _spriteShaderEffect = null;
+        public static void DisableOutlineEffect() => DisableSpriteShaderEffect();
         internal static SpriteShaderEffectRequest? GetSpriteShaderEffect() => _spriteShaderEffect;
 
         public static void DrawLine(IReadOnlyList<LinePoint> points, Color colour)
@@ -652,16 +422,10 @@ namespace Shared.Rendering
             if (points == null || points.Count == 0)
                 return;
 
-            if (_activePipeline != null)
-            {
-                _activePipeline.DrawLine(points, colour);
-            }
+            _activePipeline?.DrawLine(points, colour);
         }
 
-        public static void FlushLines()
-        {
-            _activePipeline?.FlushLines();
-        }
+        public static void FlushLines() => _activePipeline?.FlushLines();
 
         public static void DrawTextureBlend(RenderTexture texture, Rectangle? sourceRectangle, Matrix3x2 transform, Vector3 center, Vector3 translation, Color colour, float blendRate, BlendMode mode = BlendMode.NORMAL)
         {
@@ -670,12 +434,6 @@ namespace Shared.Rendering
 
             if (_activePipeline == null)
                 throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            if (_activePipeline is SilkVulkan.SilkVulkanRenderingPipeline vulkanPipeline)
-            {
-                vulkanPipeline.DrawTextureBlend(texture, sourceRectangle, transform, center, translation, colour, blendRate, mode);
-                return;
-            }
 
             bool oldBlend = _activePipeline.IsBlending();
             float oldRate = _activePipeline.GetBlendRate();
@@ -720,11 +478,7 @@ namespace Shared.Rendering
             _activePipeline.DrawTexture(texture, sourceRectangle, transform, center, translation, colour);
         }
 
-        public static void BeginSpriteBatch()
-        {
-            _activePipeline?.BeginSpriteBatch();
-        }
-
+        public static void BeginSpriteBatch() => _activePipeline?.BeginSpriteBatch();
         public static void QueueSprite(RenderTexture texture, Rectangle sourceRectangle, RectangleF destinationRectangle, Color colour)
         {
             if (!texture.IsValid)
@@ -735,11 +489,7 @@ namespace Shared.Rendering
 
             _activePipeline.QueueSprite(texture, sourceRectangle, destinationRectangle, colour);
         }
-
-        public static void EndSpriteBatch()
-        {
-            _activePipeline?.EndSpriteBatch();
-        }
+        public static void EndSpriteBatch() => _activePipeline?.EndSpriteBatch();
 
         public static RenderSurface GetCurrentSurface()
         {
@@ -792,28 +542,8 @@ namespace Shared.Rendering
             if (rectangle.Width <= 0 || rectangle.Height <= 0 || colour.A == 0)
                 return;
 
-            RenderTexture texture = GetSolidFillTexture();
-            DrawTexture(texture, new Rectangle(0, 0, 1, 1), new RectangleF(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height), colour);
-        }
-
-        private static RenderTexture GetSolidFillTexture()
-        {
-            if (_activeSession == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            if (SolidFillTextures.TryGetValue(_activeSession, out RenderTexture solidFillTexture) && solidFillTexture.IsValid)
-                return solidFillTexture;
-
-            solidFillTexture = CreateTexture(new Size(1, 1), RenderTextureFormat.A8R8G8B8, RenderTextureUsage.None, RenderTexturePool.Managed);
-
-            byte[] whitePixel = { 255, 255, 255, 255 };
-            using (TextureLock textureLock = LockTexture(solidFillTexture, TextureLockMode.Discard))
-            {
-                Marshal.Copy(whitePixel, 0, textureLock.DataPointer, whitePixel.Length);
-            }
-
-            SolidFillTextures[_activeSession] = solidFillTexture;
-            return solidFillTexture;
+            // HTML5 Canvas 直接填充矩形（无需中间白纹理）
+            CanvasRenderer.FillRect(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, colour.ToArgb());
         }
 
         public static RenderTargetResource CreateRenderTarget(Size size)
@@ -830,26 +560,13 @@ namespace Shared.Rendering
                 return;
 
             if (_activePipeline == null)
-            {
-                if (renderTarget.Surface.NativeHandle is IDisposable disposableSurface)
-                    disposableSurface.Dispose();
-
-                if (renderTarget.Texture.NativeHandle is IDisposable disposableTexture)
-                    disposableTexture.Dispose();
-
                 return;
-            }
 
             _activePipeline.ReleaseRenderTarget(renderTarget);
         }
 
         public static Size GetBackBufferSize()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            return _activePipeline.GetBackBufferSize();
-        }
+            => _activePipeline?.GetBackBufferSize() ?? new Size(1024, 768);
 
         public static RenderTexture GetColourPaletteTexture()
         {
@@ -860,12 +577,7 @@ namespace Shared.Rendering
         }
 
         public static byte[] GetColourPaletteData()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            return _activePipeline.GetColourPaletteData();
-        }
+            => _activePipeline?.GetColourPaletteData() ?? Array.Empty<byte>();
 
         public static RenderTexture GetLightTexture()
         {
@@ -876,12 +588,7 @@ namespace Shared.Rendering
         }
 
         public static Size GetLightTextureSize()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            return _activePipeline.GetLightTextureSize();
-        }
+            => _activePipeline?.GetLightTextureSize() ?? new Size(1, 1);
 
         public static RenderTexture GetPoisonTexture()
         {
@@ -892,49 +599,23 @@ namespace Shared.Rendering
         }
 
         public static Size GetPoisonTextureSize()
-        {
-            if (_activePipeline == null)
-                throw new InvalidOperationException("No rendering pipeline has been initialized.");
-
-            return _activePipeline.GetPoisonTextureSize();
-        }
+            => _activePipeline?.GetPoisonTextureSize() ?? new Size(1, 1);
 
         public static TextureFilterMode GetTextureFilter()
-        {
-            if (_activePipeline == null)
-                return _fallbackTextureFilter;
-
-            return _activePipeline.GetTextureFilter();
-        }
+            => _activePipeline?.GetTextureFilter() ?? _fallbackTextureFilter;
 
         public static void SetTextureFilter(TextureFilterMode mode)
         {
             if (_activePipeline != null)
-            {
                 _activePipeline.SetTextureFilter(mode);
-            }
             else
-            {
                 _fallbackTextureFilter = mode;
-            }
         }
 
         public static void Clear(RenderClearFlags flags, Color colour, float z, int stencil, params Rectangle[] regions)
-        {
-            if (_activePipeline != null)
-            {
-                _activePipeline.Clear(flags, colour, z, stencil, regions);
-                return;
-            }
-        }
+            => _activePipeline?.Clear(flags, colour, z, stencil, regions);
 
-        public static void FlushSprite()
-        {
-            if (_activePipeline != null)
-            {
-                _activePipeline.FlushSprite();
-            }
-        }
+        public static void FlushSprite() => _activePipeline?.FlushSprite();
 
         public static void RegisterControlCache(ITextureCacheItem control)
         {
@@ -993,9 +674,7 @@ namespace Shared.Rendering
                 throw new ArgumentException("A valid texture handle is required.", nameof(texture));
 
             if (_activePipeline != null)
-            {
                 return _activePipeline.LockTexture(texture, mode);
-            }
 
             throw new InvalidOperationException("Rendering pipeline is not initialized.");
         }
@@ -1059,12 +738,7 @@ namespace Shared.Rendering
         }
 
         public static IReadOnlyList<ISoundCacheItem> GetRegisteredSoundCaches()
-        {
-            if (_activePipeline != null)
-                return _activePipeline.GetRegisteredSoundCaches();
-
-            return FallbackSoundCache;
-        }
+            => _activePipeline?.GetRegisteredSoundCaches() ?? FallbackSoundCache;
 
         public static void MemoryClear()
         {
@@ -1074,96 +748,67 @@ namespace Shared.Rendering
                 return;
             }
 
-            DateTime now = Settings.CurrentTime;
-
-            for (int i = FallbackControlCache.Count - 1; i >= 0; i--)
-            {
-                ITextureCacheItem control = FallbackControlCache[i];
-                if (now < control.ExpireTime)
-                    continue;
-
-                control.DisposeTexture();
-            }
-
-            for (int i = FallbackTextureCache.Count - 1; i >= 0; i--)
-            {
-                ITextureCacheItem texture = FallbackTextureCache[i];
-                if (now < texture.ExpireTime)
-                    continue;
-
-                texture.DisposeTexture();
-            }
-
-            for (int i = FallbackSoundCache.Count - 1; i >= 0; i--)
-            {
-                ISoundCacheItem sound = FallbackSoundCache[i];
-                if (now < sound.ExpireTime)
-                    continue;
-
-                sound.DisposeSoundBuffer();
-            }
+            FallbackControlCache.Clear();
+            FallbackTextureCache.Clear();
+            FallbackSoundCache.Clear();
         }
 
-        private static void ConfigureFallbackGraphics(Graphics graphics)
-        {
-            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        // ---- 精灵着色器特效（Canvas 2D 暂以占位实现，保留 API 以便后续移植）----
 
-            graphics.TextContrast = 0;
+        internal enum SpriteShaderEffectKind
+        {
+            Grayscale,
+            SolidShadowFill,
+            Outline,
+            DropShadow,
         }
 
-        private static Color ConvertHslToRgbFallback(float h, float s, float l)
+        internal readonly struct SpriteShaderEffectRequest
         {
-            float r, g, b;
-
-            if (s == 0)
+            public SpriteShaderEffectRequest(SpriteShaderEffectKind kind, float opacity = 1F)
             {
-                r = g = b = l;
-            }
-            else
-            {
-                float q = l < 0.5f ? l * (1 + s) : l + s - l * s;
-                float p = 2 * l - q;
-                r = HueToRgb(p, q, h + 1f / 3f);
-                g = HueToRgb(p, q, h);
-                b = HueToRgb(p, q, h - 1f / 3f);
+                Kind = kind;
+                Opacity = opacity;
+                Outline = default;
+                DropShadow = default;
             }
 
-            return Color.FromArgb((int)(r * 255), (int)(g * 255), (int)(b * 255));
-        }
+            public SpriteShaderEffectRequest(OutlineEffectSettings outline)
+            {
+                Kind = SpriteShaderEffectKind.Outline;
+                Opacity = 1F;
+                Outline = outline;
+                DropShadow = default;
+            }
 
-        private static float HueToRgb(float p, float q, float t)
-        {
-            if (t < 0f) t += 1f;
-            if (t > 1f) t -= 1f;
-            if (t < 1f / 6f) return p + (q - p) * 6f * t;
-            if (t < 1f / 2f) return q;
-            if (t < 2f / 3f) return p + (q - p) * (2f / 3f - t) * 6f;
-            return p;
+            public SpriteShaderEffectRequest(DropShadowEffectSettings dropShadow)
+            {
+                Kind = SpriteShaderEffectKind.DropShadow;
+                Opacity = dropShadow.StartOpacity;
+                Outline = default;
+                DropShadow = dropShadow;
+            }
+
+            public SpriteShaderEffectKind Kind { get; }
+            public float Opacity { get; }
+            public OutlineEffectSettings Outline { get; }
+            public DropShadowEffectSettings DropShadow { get; }
         }
 
         internal readonly struct OutlineEffectSettings
         {
-            public Color Colour { get; }
-            public float Thickness { get; }
-
             public OutlineEffectSettings(Color colour, float thickness)
             {
                 Colour = colour;
                 Thickness = thickness;
             }
+
+            public Color Colour { get; }
+            public float Thickness { get; }
         }
 
         internal readonly struct DropShadowEffectSettings
         {
-            public Color Colour { get; }
-            public float Width { get; }
-            public float StartOpacity { get; }
-            public RectangleF? VisibleBounds { get; }
-
             public DropShadowEffectSettings(Color colour, float width, float startOpacity, RectangleF? visibleBounds)
             {
                 Colour = colour;
@@ -1171,46 +816,11 @@ namespace Shared.Rendering
                 StartOpacity = startOpacity;
                 VisibleBounds = visibleBounds;
             }
-        }
 
-        internal readonly struct SpriteShaderEffectRequest
-        {
-            public SpriteShaderEffectKind Kind { get; }
-            public float Amount { get; }
-            public OutlineEffectSettings Outline { get; }
-            public DropShadowEffectSettings DropShadow { get; }
-
-            public SpriteShaderEffectRequest(OutlineEffectSettings outline)
-            {
-                Kind = SpriteShaderEffectKind.Outline;
-                Amount = 0F;
-                Outline = outline;
-                DropShadow = default;
-            }
-
-            public SpriteShaderEffectRequest(SpriteShaderEffectKind kind, float amount = 0F)
-            {
-                Kind = kind;
-                Amount = amount;
-                Outline = default;
-                DropShadow = default;
-            }
-
-            public SpriteShaderEffectRequest(DropShadowEffectSettings dropShadow)
-            {
-                Kind = SpriteShaderEffectKind.DropShadow;
-                Amount = 0F;
-                Outline = default;
-                DropShadow = dropShadow;
-            }
-        }
-
-        internal enum SpriteShaderEffectKind
-        {
-            Outline,
-            Grayscale,
-            DropShadow,
-            SolidShadowFill
+            public Color Colour { get; }
+            public float Width { get; }
+            public float StartOpacity { get; }
+            public RectangleF? VisibleBounds { get; }
         }
     }
 }

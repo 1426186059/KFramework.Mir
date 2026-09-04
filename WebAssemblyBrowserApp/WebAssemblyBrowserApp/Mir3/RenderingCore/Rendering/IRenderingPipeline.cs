@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
-using System.Windows.Forms;
+using MirEngine;
 
 namespace Shared.Rendering
 {
@@ -12,7 +12,8 @@ namespace Shared.Rendering
 
         void Initialize(RenderingPipelineContext context);
 
-        void RunMessageLoop(Form form, Action loop);
+        // 浏览器端由引擎主循环驱动，不再依赖 WinForms Form
+        void RunMessageLoop(Action loop);
 
         bool RenderFrame(Action drawScene);
 
@@ -34,13 +35,11 @@ namespace Shared.Rendering
 
         IReadOnlyList<Size> GetSupportedResolutions();
 
-        Size MeasureText(string text, Font font);
+        Size MeasureText(string text, MirEngine.Font font);
 
-        Size MeasureText(string text, Font font, Size proposedSize, TextFormatFlags format);
+        Size MeasureText(string text, MirEngine.Font font, Size proposedSize);
 
         float GetHorizontalDpi();
-
-        void ConfigureGraphics(Graphics graphics);
 
         Color ConvertHslToRgb(float h, float s, float l);
 

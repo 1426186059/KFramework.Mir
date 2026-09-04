@@ -1146,52 +1146,18 @@ namespace Shared.Rendering
 
         private static byte[] DecodePngBgra(byte[] buffer, out Size size)
         {
-            using (MemoryStream stream = new MemoryStream(buffer))
-            using (Bitmap bitmap = new Bitmap(stream))
-            {
-                size = bitmap.Size;
-                BitmapData data = bitmap.LockBits(new Rectangle(Point.Empty, bitmap.Size), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-
-                try
-                {
-                    byte[] pixels = new byte[bitmap.Width * bitmap.Height * 4];
-                    for (int y = 0; y < bitmap.Height; y++)
-                    {
-                        Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), pixels, y * bitmap.Width * 4, bitmap.Width * 4);
-                    }
-
-                    return pixels;
-                }
-                finally
-                {
-                    bitmap.UnlockBits(data);
-                }
-            }
+            // 浏览器 WASM 无 System.Drawing.Bitmap；本工程资源为 DXT1/DXT5，PNG 路径不会被触发。
+            // 返回空像素作安全降级，避免单张不支持的图片导致整页崩溃。
+            size = new Size(0, 0);
+            return Array.Empty<byte>();
         }
 
         private static byte[] DecodeBc7Bgra(byte[] buffer, short width, short height, out Size size)
         {
-            int safeWidth = Math.Max(0, (int)width);
-            int safeHeight = Math.Max(0, (int)height);
-            size = new Size(safeWidth, safeHeight);
-
-            if (safeWidth == 0 || safeHeight == 0 || buffer == null || buffer.Length == 0)
-                return Array.Empty<byte>();
-
-            BCnEncoder.Decoder.BcDecoder decoder = new BCnEncoder.Decoder.BcDecoder();
-            BCnEncoder.Shared.ColorRgba32[] pixels = decoder.DecodeRaw(buffer, safeWidth, safeHeight, BCnEncoder.Shared.CompressionFormat.Bc7);
-            byte[] result = new byte[safeWidth * safeHeight * 4];
-
-            for (int i = 0; i < pixels.Length && i * 4 + 3 < result.Length; i++)
-            {
-                int offset = i * 4;
-                result[offset] = pixels[i].b;
-                result[offset + 1] = pixels[i].g;
-                result[offset + 2] = pixels[i].r;
-                result[offset + 3] = pixels[i].a;
-            }
-
-            return result;
+            // BC7 依赖 BCnEncoder（第三方库，WASM 不可用）。本工程资源为 DXT1/DXT5，BC7 路径不会被触发。
+            // 返回空像素作安全降级。
+            size = new Size(Math.Max(0, (int)width), Math.Max(0, (int)height));
+            return Array.Empty<byte>();
         }
 
         public void Dispose()
@@ -1340,34 +1306,7 @@ namespace Shared.Rendering
             byte[] pixels = ImageData;
 
             if (codec != ZlImageCodec.Bgra32 && codec != ZlImageCodec.Png)
-            {
-                BCnEncoder.Shared.CompressionFormat format;
-                switch (codec)
-                {
-                    case ZlImageCodec.Dxt1:
-                        format = BCnEncoder.Shared.CompressionFormat.Bc1WithAlpha;
-                        break;
-                    case ZlImageCodec.Dxt5:
-                        format = BCnEncoder.Shared.CompressionFormat.Bc3;
-                        break;
-                    case ZlImageCodec.Bc7:
-                        format = BCnEncoder.Shared.CompressionFormat.Bc7;
-                        break;
-                    default:
-                        return GetVisibleBounds();
-                }
-
-                BCnEncoder.Shared.ColorRgba32[] decoded = new BCnEncoder.Decoder.BcDecoder().DecodeRaw(ImageData, Width, Height, format);
-                pixels = new byte[decoded.Length * 4];
-                for (int i = 0; i < decoded.Length; i++)
-                {
-                    int offset = i * 4;
-                    pixels[offset] = decoded[i].b;
-                    pixels[offset + 1] = decoded[i].g;
-                    pixels[offset + 2] = decoded[i].r;
-                    pixels[offset + 3] = decoded[i].a;
-                }
-            }
+                return GetVisibleBounds(); // WASM 无 BCnEncoder；压缩格式阴影边界回退为整图边界
 
             int minX = Width, minY = Height, maxX = -1, maxY = -1;
             for (int y = 0; y < Height; y++)
@@ -1782,52 +1721,18 @@ namespace Shared.Rendering
 
         private static byte[] DecodePngBgra(byte[] buffer, out Size size)
         {
-            using (MemoryStream stream = new MemoryStream(buffer))
-            using (Bitmap bitmap = new Bitmap(stream))
-            {
-                size = bitmap.Size;
-                BitmapData data = bitmap.LockBits(new Rectangle(Point.Empty, bitmap.Size), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-
-                try
-                {
-                    byte[] pixels = new byte[bitmap.Width * bitmap.Height * 4];
-                    for (int y = 0; y < bitmap.Height; y++)
-                    {
-                        Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), pixels, y * bitmap.Width * 4, bitmap.Width * 4);
-                    }
-
-                    return pixels;
-                }
-                finally
-                {
-                    bitmap.UnlockBits(data);
-                }
-            }
+            // 浏览器 WASM 无 System.Drawing.Bitmap；本工程资源为 DXT1/DXT5，PNG 路径不会被触发。
+            // 返回空像素作安全降级，避免单张不支持的图片导致整页崩溃。
+            size = new Size(0, 0);
+            return Array.Empty<byte>();
         }
 
         private static byte[] DecodeBc7Bgra(byte[] buffer, short width, short height, out Size size)
         {
-            int safeWidth = Math.Max(0, (int)width);
-            int safeHeight = Math.Max(0, (int)height);
-            size = new Size(safeWidth, safeHeight);
-
-            if (safeWidth == 0 || safeHeight == 0 || buffer == null || buffer.Length == 0)
-                return Array.Empty<byte>();
-
-            BCnEncoder.Decoder.BcDecoder decoder = new BCnEncoder.Decoder.BcDecoder();
-            BCnEncoder.Shared.ColorRgba32[] pixels = decoder.DecodeRaw(buffer, safeWidth, safeHeight, BCnEncoder.Shared.CompressionFormat.Bc7);
-            byte[] result = new byte[safeWidth * safeHeight * 4];
-
-            for (int i = 0; i < pixels.Length && i * 4 + 3 < result.Length; i++)
-            {
-                int offset = i * 4;
-                result[offset] = pixels[i].b;
-                result[offset + 1] = pixels[i].g;
-                result[offset + 2] = pixels[i].r;
-                result[offset + 3] = pixels[i].a;
-            }
-
-            return result;
+            // BC7 依赖 BCnEncoder（第三方库，WASM 不可用）。本工程资源为 DXT1/DXT5，BC7 路径不会被触发。
+            // 返回空像素作安全降级。
+            size = new Size(Math.Max(0, (int)width), Math.Max(0, (int)height));
+            return Array.Empty<byte>();
         }
 
         private static byte[] ReadPayloadSegment(byte[] payload, int offset, int count)

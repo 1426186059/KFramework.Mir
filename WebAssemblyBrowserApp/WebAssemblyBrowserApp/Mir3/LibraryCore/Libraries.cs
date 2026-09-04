@@ -454,6 +454,22 @@ namespace Library
             [70] = LibraryFile.Forest_SmObjectsc,
             [71] = LibraryFile.Forest_Animationsc,
         };
+
+        /// <summary>
+        /// 把原版库路径（如 <c>Data\Map Data\Tilesc.Zl</c>）规范化为 Web 可取的 URL
+        /// （<c>data/MapData/Tilesc.Zl</c>）。本工程 wwwroot/data 下实际目录为 MapData（无空格）。
+        /// </summary>
+        public static string GetUrl(LibraryFile file)
+        {
+            if (!LibraryList.TryGetValue(file, out string? p) || string.IsNullOrEmpty(p))
+                return string.Empty;
+
+            string s = p.Replace('\\', '/').Replace("Map Data", "MapData");
+            if (s.StartsWith("Data/", StringComparison.OrdinalIgnoreCase))
+                s = s.Substring(5);
+
+            return "data/" + s;
+        }
     }
 
     public enum LibraryFile

@@ -1,18 +1,18 @@
 using System;
 using System.Drawing;
-using System.Windows.Forms;
 
 namespace Shared.Rendering
 {
     public sealed class RenderingPipelineContext
     {
-        public RenderingPipelineContext(Control renderTarget, RenderingHostSettings settings = null)
+        // renderTarget 在浏览器端是承载 Canvas 的宿主对象（此处仅保留引用，不依赖 WinForms Control）
+        public RenderingPipelineContext(object renderTarget, RenderingHostSettings settings = null)
         {
-            RenderTarget = renderTarget ?? throw new ArgumentNullException(nameof(renderTarget));
+            RenderTarget = renderTarget;
             Settings = settings ?? new RenderingHostSettings();
         }
 
-        public Control RenderTarget { get; }
+        public object RenderTarget { get; }
         public RenderingHostSettings Settings { get; }
     }
 
