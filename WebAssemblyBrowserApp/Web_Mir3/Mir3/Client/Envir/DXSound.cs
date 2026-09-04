@@ -1,23 +1,16 @@
 ﻿using Shared.Rendering;
-using SharpDX.DirectSound;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using NAudioWave = NAudio.Wave;
-using NAudioVorbis = NAudio.Vorbis;
-using SharpDXMultimedia = SharpDX.Multimedia;
 
 namespace Client.Envir
 {
-    public sealed class DXSound : ISoundCacheItem
+    /// <summary>
+    /// WASM 版音效：不再使用 NAudio / SharpDX，改为把 .wav 路径交给 JS 端 Web Audio 播放。
+    /// 公开行为与桌面版一致（Play/Stop/SetVolume/DisposeSoundBuffer/UpdateFlags），所有调用点无需改动。
+    /// </summary>
+    public sealed class DXSound
     {
         public string FileName { get; set; }
-
-        public List<SecondarySoundBuffer> BufferList = new List<SecondarySoundBuffer>();
-
-        private SharpDXMultimedia.WaveFormat Format;
-        private byte[] RawData;
-
 
         public DateTime ExpireTime { get; set; }
         public bool Loop { get; set; }
@@ -26,6 +19,8 @@ namespace Client.Envir
 
         public int Volume { get; set; }
 
+        private int _activeId;
+
         public DXSound(string fileName, SoundType type)
         {
             FileName = fileName;
@@ -33,153 +28,28 @@ namespace Client.Envir
 
             Volume = DXSoundManager.GetVolume(SoundType);
         }
+
         public void Play()
         {
-            if (RawData == null)
-            {
-                string soundFileName = GetResolvedFileName();
+            // 循环音效已在播放则跳过，避免重复触发
+            if (Loop && _activeId != 0) return;
 
-                if (soundFileName == null)
-                {
-                    return;
-                }
-
-                if (string.Equals(Path.GetExtension(soundFileName), ".mp3", StringComparison.OrdinalIgnoreCase))
-                {
-                    using (var mp3 = new NAudioWave.Mp3FileReader(soundFileName))
-                    {
-                        Format = ConvertWaveFormat(mp3.WaveFormat);
-
-                        RawData = ReadAllBytes(mp3);
-                    }
-                }
-                else if (string.Equals(Path.GetExtension(soundFileName), ".ogg", StringComparison.OrdinalIgnoreCase))
-                {
-                    using (var ogg = new NAudioVorbis.VorbisWaveReader(soundFileName))
-                    {
-                        Format = ConvertWaveFormat(ogg.WaveFormat);
-                        RawData = ReadAllBytes(ogg);
-                    }
-                }
-                else
-                {
-                    using (var waveReader = new NAudioWave.WaveFileReader(soundFileName))
-                    {
-                        Format = ConvertWaveFormat(waveReader.WaveFormat);
-                        RawData = ReadAllBytes(waveReader);
-                    }
-                }
-                RenderingPipelineManager.RegisterSoundCache(this);
-            }
-
-
-            if (BufferList.Count == 0)
-            {
-                CreateBuffer();
-            }
-
-            if (Loop)
-            {
-                if (!IsBufferPlaying(BufferList[0]))
-                {
-                    BufferList[0].Play(0, PlayFlags.Looping);
-                }
-
-                ExpireTime = DateTime.MaxValue;
-                return;
-            }
-            ExpireTime = CEnvir.Now + Config.CacheDuration;
-
-            for (int i = BufferList.Count - 1; i >= 0; i--)
-            {
-                if (BufferList[i].IsDisposed)
-                {
-                    BufferList.RemoveAt(i);
-                    continue;
-                }
-
-                if (IsBufferPlaying(BufferList[i]))
-                {
-                    continue;
-                }
-
-                BufferList[i].Play(0, PlayFlags.None);
-                return;
-            }
-
-            if (BufferList.Count >= Config.SoundOverLap)
-            {
-                return;
-            }
-
-            SecondarySoundBuffer buff = CreateBuffer();
-            buff.Play(0, PlayFlags.None);
+            string url = "MyRes/Sound/" + Path.GetFileName(FileName);
+            _activeId = MirClientHost.PlaySound(url, Volume, Loop);
         }
+
         public void Stop()
         {
-            if (BufferList == null)
+            if (_activeId != 0)
             {
-                return;
-            }
-
-            if (Loop)
-            {
-                ExpireTime = CEnvir.Now + Config.CacheDuration;
-            }
-
-            for (int i = BufferList.Count - 1; i >= 0; i--)
-            {
-                if (BufferList[i].IsDisposed)
-                {
-                    BufferList.RemoveAt(i);
-                    continue;
-                }
-                BufferList[i].CurrentPosition = 0;
-                BufferList[i].Stop();
+                MirClientHost.StopSound(_activeId);
+                _activeId = 0;
             }
         }
 
-        private SecondarySoundBuffer CreateBuffer()
-        {
-            SecondarySoundBuffer buff;
-            BufferFlags flags = BufferFlags.ControlVolume;
-
-            if (Config.SoundInBackground)
-            {
-                flags |= BufferFlags.GlobalFocus;
-            }
-
-            var description = new SoundBufferDescription
-            {
-                Format = Format,
-                BufferBytes = RawData.Length,
-                Flags = flags
-            };
-
-            BufferList.Add(buff = new SecondarySoundBuffer(DXSoundManager.Device, description)
-            {
-                Volume = Volume
-            });
-
-            buff.Write(RawData, 0, LockFlags.EntireBuffer);
-
-            return buff;
-        }
         public void DisposeSoundBuffer()
         {
-            RawData = null;
-
-            for (int i = BufferList.Count - 1; i >= 0; i--)
-            {
-                if (!BufferList[i].IsDisposed)
-                {
-                    BufferList[i].Dispose();
-                }
-
-                BufferList.RemoveAt(i);
-            }
-
-            RenderingPipelineManager.UnregisterSoundCache(this);
+            Stop();
             ExpireTime = DateTime.MinValue;
         }
 
@@ -187,92 +57,13 @@ namespace Client.Envir
         {
             Volume = DXSoundManager.GetVolume(SoundType);
 
-            for (int i = BufferList.Count - 1; i >= 0; i--)
-            {
-                if (BufferList[i].IsDisposed)
-                {
-                    BufferList.RemoveAt(i);
-                    continue;
-                }
-
-                BufferList[i].Volume = Volume;
-            }
+            if (_activeId != 0)
+                MirClientHost.SetSoundVolume(_activeId, Volume);
         }
 
         public void UpdateFlags()
         {
-            for (int i = BufferList.Count - 1; i >= 0; i--)
-            {
-                SecondarySoundBuffer buffer = CreateBuffer();
-
-                buffer.CurrentPosition = GetCurrentPlayPosition(BufferList[0]);
-
-                if (IsBufferPlaying(BufferList[0]))
-                {
-                    buffer.Play(0, Loop ? PlayFlags.Looping : PlayFlags.None);
-                }
-
-                if (!BufferList[0].IsDisposed)
-                {
-                    BufferList[0].Dispose();
-                }
-
-                BufferList.RemoveAt(0);
-            }
-
-        }
-
-        private static bool IsBufferPlaying(SecondarySoundBuffer buffer)
-        {
-            return ((BufferStatus)buffer.Status).HasFlag(BufferStatus.Playing);
-        }
-
-        private static int GetCurrentPlayPosition(SecondarySoundBuffer buffer)
-        {
-            buffer.GetCurrentPosition(out int playCursor, out _);
-            return playCursor;
-        }
-
-        private static SharpDXMultimedia.WaveFormat ConvertWaveFormat(global::NAudio.Wave.WaveFormat sourceFormat)
-        {
-            if (!Enum.TryParse(sourceFormat.Encoding.ToString(), out SharpDXMultimedia.WaveFormatEncoding encoding))
-                encoding = SharpDXMultimedia.WaveFormatEncoding.Pcm;
-
-            return SharpDXMultimedia.WaveFormat.CreateCustomFormat(
-                encoding,
-                sourceFormat.SampleRate,
-                sourceFormat.Channels,
-                sourceFormat.AverageBytesPerSecond,
-                sourceFormat.BlockAlign,
-                sourceFormat.BitsPerSample);
-        }
-
-        private static byte[] ReadAllBytes(NAudioWave.WaveStream stream)
-        {
-            stream.Position = 0;
-
-            using (var memory = new MemoryStream())
-            {
-                stream.CopyTo(memory);
-                return memory.ToArray();
-            }
-        }
-
-        private string GetResolvedFileName()
-        {
-            if (File.Exists(FileName))
-            {
-                return FileName;
-            }
-
-            string oggFileName = Path.ChangeExtension(FileName, ".ogg");
-
-            if (File.Exists(oggFileName))
-            {
-                return oggFileName;
-            }
-
-            return null;
+            // Web Audio 无需重建缓冲
         }
     }
 }

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using MirEngine;
+using MirClient.Assets;
 using Shared.Rendering;
 
 namespace Shared.Rendering
@@ -16,6 +18,21 @@ namespace Shared.Rendering
         private RenderingPipelineContext _context;
         private int _currentSurfaceId = CanvasRenderer.MainTarget;
         private Size _backBufferSize = new Size(1024, 768);
+
+        // 真实 Zircon 客户端（MirLibrary/MirImage）通过 CreateTexture + LockTexture + Marshal.Copy 上传像素，
+        // 但平台上没有原生指针，因此这里用"int 句柄 + 托管 RGBA 缓冲"模拟：
+        //   CreateTexture 只分配一个 int 句柄并记录尺寸/格式；
+        //   LockTexture 钉住一块 RGBA 缓冲，调用方把（DXT 或已解压的）字节拷进来；
+        //   解锁时把缓冲解码为 RGBA 并上传到 canvas（mir.createImage）。
+        private int _nextImageId = 1;
+        private readonly Dictionary<int, Size> _textureSizes = new Dictionary<int, Size>();
+        private readonly Dictionary<int, RenderTextureFormat> _textureFormats = new Dictionary<int, RenderTextureFormat>();
+
+        // 无效纹理返回占位锁，避免使用零指针触发 TextureLock.From 的异常。
+        private static readonly byte[] _sentinel = new byte[1];
+        private static readonly GCHandle _sentinelHandle = GCHandle.Alloc(_sentinel, GCHandleType.Pinned);
+        private static readonly TextureLock _placeholderLock =
+            TextureLock.From(_sentinelHandle.AddrOfPinnedObject(), 1, () => { });
 
         private float _opacity = 1f;
         private bool _blending;
@@ -179,15 +196,66 @@ namespace Shared.Rendering
 
         public RenderTexture CreateTexture(Size size, RenderTextureFormat format, RenderTextureUsage usage, RenderTexturePool pool)
         {
-            int id = CanvasRenderer.CreateOffscreen(Math.Max(1, size.Width), Math.Max(1, size.Height));
+            int id = _nextImageId++;
+            _textureSizes[id] = size;
+            _textureFormats[id] = format;
             return RenderTexture.From(id);
         }
-        public void ReleaseTexture(RenderTexture texture) { }
+
+        public void ReleaseTexture(RenderTexture texture)
+        {
+            if (!texture.IsValid) return;
+            int id = (int)texture.NativeHandle;
+            _textureSizes.Remove(id);
+            _textureFormats.Remove(id);
+            CanvasRenderer.DisposeImage(id);
+        }
 
         public TextureLock LockTexture(RenderTexture texture, TextureLockMode mode)
         {
-            // FillRectangle 已改写为走 ColorFill，不会真正写入像素，这里返回占位锁
-            return TextureLock.From(IntPtr.Zero, 0, () => { });
+            if (!texture.IsValid) return _placeholderLock;
+
+            int id = (int)texture.NativeHandle;
+            if (!_textureSizes.TryGetValue(id, out Size size) || !_textureFormats.TryGetValue(id, out RenderTextureFormat format))
+                return _placeholderLock;
+
+            int w = Math.Max(1, size.Width);
+            int h = Math.Max(1, size.Height);
+            int bytes = w * h * 4;
+            if (bytes <= 0) return _placeholderLock;
+
+            // 钉住一块 RGBA 缓冲，调用方（MirImage）会把（DXT 或已解压）字节拷进来；
+            // 解锁时再解码为 RGBA 并上传到 canvas。
+            byte[] buffer = new byte[bytes];
+            GCHandle handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+
+            return TextureLock.From(handle.AddrOfPinnedObject(), w * 4, () =>
+            {
+                handle.Free();
+
+                try
+                {
+                    byte[] rgba;
+                    if (format == RenderTextureFormat.Dxt1 || format == RenderTextureFormat.Dxt5)
+                    {
+                        int blocksX = (w + 3) / 4;
+                        int blocksY = (h + 3) / 4;
+                        int blockSize = format == RenderTextureFormat.Dxt1 ? 8 : 16;
+                        int dxtLen = blocksX * blocksY * blockSize;
+                        rgba = DxtDecoder.Decode(buffer.AsSpan(0, Math.Min(dxtLen, buffer.Length)), w, h, format == RenderTextureFormat.Dxt1);
+                    }
+                    else
+                    {
+                        rgba = buffer;
+                    }
+
+                    CanvasRenderer.UploadImage(id, rgba, w, h);
+                }
+                catch
+                {
+                    // 单张纹理上传失败不应中断整帧
+                }
+            });
         }
 
         public void RegisterTextureCache(ITextureCacheItem texture) { }

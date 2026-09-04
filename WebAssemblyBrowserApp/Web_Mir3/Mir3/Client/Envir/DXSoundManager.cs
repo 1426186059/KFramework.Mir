@@ -1061,8 +1061,8 @@ namespace Client.Envir
         {
             try
             {
-                Device = new DirectSound();
-                Device.SetCooperativeLevel(CEnvir.Target.Handle, CooperativeLevel.Normal);
+                // WASM：用 Web Audio 后端（见 MirClientHost 音频方法 / main.js mir.playSound）
+                MirClientHost.InitAudio();
                 AdjustVolume();
             }
             catch (Exception ex)
@@ -1094,12 +1094,8 @@ namespace Client.Envir
         }
         public static void StopAllSounds()
         {
-            List<ISoundCacheItem> sounds = new List<ISoundCacheItem>(RenderingPipelineManager.GetRegisteredSoundCaches());
-
-            for (int i = sounds.Count - 1; i >= 0; i--)
-            {
-                sounds[i].Stop();
-            }
+            // WASM：直接清空 JS 端所有活动音源
+            MirClientHost.StopAllSounds();
         }
         public static void AdjustVolume()
         {
@@ -1108,12 +1104,7 @@ namespace Client.Envir
         }
         public static void UpdateFlags()
         {
-            List<ISoundCacheItem> sounds = new List<ISoundCacheItem>(RenderingPipelineManager.GetRegisteredSoundCaches());
-
-            for (int i = sounds.Count - 1; i >= 0; i--)
-            {
-                sounds[i].UpdateFlags();
-            }
+            // WASM / Web Audio 无需重建缓冲，保持无操作
         }
 
         public static int GetVolume(SoundType type)
@@ -1142,20 +1133,12 @@ namespace Client.Envir
                     break;
             }
 
-            if (volume == 0)
-                return -10000;
-
-            return (int)Math.Floor(2000D * Math.Log10(volume / 100D) + 0.5D);
+            return volume; // 0..100，供 Web Audio gain 直接使用
         }
 
         public static void Unload()
         {
-            List<ISoundCacheItem> sounds = new List<ISoundCacheItem>(RenderingPipelineManager.GetRegisteredSoundCaches());
-
-            for (int i = sounds.Count - 1; i >= 0; i--)
-            {
-                sounds[i].DisposeSoundBuffer();
-            }
+            MirClientHost.StopAllSounds();
 
             if (Device != null)
             {

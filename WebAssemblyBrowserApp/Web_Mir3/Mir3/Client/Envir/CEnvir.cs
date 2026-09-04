@@ -18,6 +18,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -107,6 +108,47 @@ namespace Client.Envir
                     break;
             }
 
+            LoadTranslationsFromDisk();
+        }
+
+        /// <summary>
+        /// 从磁盘 Translations/*.ini 加载翻译，覆盖嵌入的默认字符串，使 H5 与真实 Zircon 客户端使用同一份翻译文件。
+        /// WASM 下经 MirLibrary.GetBytesFromUrl（= mir.getBytes）读取；桌面端未挂在该钩子上时自动跳过。
+        /// </summary>
+        private static void LoadTranslationsFromDisk()
+        {
+            if (Language == null) return;
+            try
+            {
+                string file = Config.Language != null && Config.Language.IndexOf("Chinese", StringComparison.OrdinalIgnoreCase) >= 0
+                    ? "ChineseMessages.ini" : "EnglishMessages.ini";
+
+                byte[] data = MirLibrary.GetBytesFromUrl?.Invoke("MyRes/Translations/" + file);
+                if (data == null || data.Length == 0) return;
+
+                string text = Encoding.UTF8.GetString(data);
+                Type type = Language.GetType();
+
+                foreach (string raw in text.Split('\n'))
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line[0] == '[') continue;
+
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+
+                    string key = line.Substring(0, eq).Trim();
+                    string val = line.Substring(eq + 1);
+
+                    PropertyInfo prop = type.GetProperty(key);
+                    if (prop != null && prop.CanWrite)
+                        prop.SetValue(Language, val);
+                }
+            }
+            catch
+            {
+                // 翻译加载失败不影响启动，保留嵌入默认值
+            }
         }
 
         private static void A()

@@ -19,14 +19,18 @@ namespace Shared.Rendering
         public static Func<bool> GetUseZlAtlasPages { get; set; } = () => false;
         public static Action DrawCounted { get; set; }
 
+        /// <summary>WASM 按需取字节的钩子，由 MirClientHost 指向 mir.getBytes（同步拉取，避免 GB 级预下载）。</summary>
+        public static Func<string, byte[]> GetBytesFromUrl { get; set; }
+
         public readonly object LoadLocker = new object();
 
         public int Version;
 
         public string FileName;
 
-        private FileStream _FStream;
+        private Stream _FStream;
         private BinaryReader _BReader;
+        private readonly bool _fromUrl;
 
         public bool Loaded, Loading;
 
@@ -43,12 +47,44 @@ namespace Shared.Rendering
             _FStream = File.OpenRead(fileName);
             _BReader = new BinaryReader(_FStream);
         }
+
+        /// <summary>
+        /// WASM 懒加载专用：仅记录资源 URL，首次 ReadLibrary 时经 GetBytesFromUrl 按需拉取字节，
+        /// 避免启动时下载 GB 级 .Zl 资源。
+        /// </summary>
+        public MirLibrary(string url, bool fromUrl)
+        {
+            FileName = url;
+            _fromUrl = fromUrl;
+        }
+
+        /// <summary>
+        /// WASM 专用：从内存字节直接构造（已由 JS 预取）。
+        /// </summary>
+        public MirLibrary(byte[] data)
+        {
+            FileName = null;
+            _FStream = new MemoryStream(data);
+            _BReader = new BinaryReader(_FStream);
+        }
         public void ReadLibrary()
         {
             lock (LoadLocker)
             {
                 if (Loading) return;
                 Loading = true;
+            }
+
+            if (_fromUrl && _BReader == null)
+            {
+                byte[] data = GetBytesFromUrl?.Invoke(FileName);
+                if (data == null || data.Length == 0)
+                {
+                    Loaded = true;
+                    return;
+                }
+                _FStream = new MemoryStream(data);
+                _BReader = new BinaryReader(_FStream);
             }
 
             if (_BReader == null)

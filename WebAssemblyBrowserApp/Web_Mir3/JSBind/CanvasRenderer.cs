@@ -37,7 +37,17 @@ internal static partial class CanvasRenderer
     [JSImport("mir.crFlush", "main.js")]
     private static partial void FlushImpl();
 
+    // 上传已解码的 RGBA 像素为一个纹理句柄（真实 Zircon 客户端 MirImage 用此把 DXT 解码结果送上 canvas）。
+    // 复用 main.js 的 mir.createImage（与 demo 的 MirCanvas.CreateImage 同一 JS 函数，按 id 存入 textures Map）。
+    [JSImport("mir.createImage", "main.js")]
+    private static partial void UploadImageImpl(int id, byte[] rgba, int w, int h);
+
+    [JSImport("mir.disposeImage", "main.js")]
+    private static partial void DisposeImageImpl(int id);
+
     public static int CreateOffscreen(int w, int h) => CreateOffscreenImpl(w, h);
+    public static void UploadImage(int id, byte[] rgba, int w, int h) => UploadImageImpl(id, rgba, w, h);
+    public static void DisposeImage(int id) => DisposeImageImpl(id);
     public static void SetTarget(int id) => SetTargetImpl(id);
     public static void Clear(int r, int g, int b, int a) => ClearImpl(r, g, b, a);
     public static void Clear(Color c) => ClearImpl(c.R, c.G, c.B, c.A);

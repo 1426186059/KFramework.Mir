@@ -39,19 +39,19 @@ public static partial class MirGame
 
     private const double MoveMsPerCell = 260;
 
-    private const string MapUrl = "data/Map/11.map";
-    private const string HumanUrl = "data/M-Hum.Zl";
+    private const string MapUrl = "MyRes/Data/Map/11.map";
+    private const string HumanUrl = "MyRes/Data/M-Hum.Zl";
 
     /// <summary>地图用到的资源库：KrOrder 编号 → 相对 data 的路径。</summary>
     private static readonly (int FileId, string Path)[] MapLibraries =
     {
-        (0, "data/MapData/Tilesc.Zl"),
-        (1, "data/MapData/Tiles30c.Zl"),
-        (5, "data/MapData/Cliffsc.Zl"),
-        (9, "data/MapData/Wallsc.Zl"),
-        (10, "data/MapData/SmObjectsc.Zl"),
-        (23, "data/MapData/Wood/Furnituresc.Zl"),
-        (25, "data/MapData/Wood/SmObjectsc.Zl"),
+        (0, "MyRes/Data/MapData/Tilesc.Zl"),
+        (1, "MyRes/Data/MapData/Tiles30c.Zl"),
+        (5, "MyRes/Data/MapData/Cliffsc.Zl"),
+        (9, "MyRes/Data/MapData/Wallsc.Zl"),
+        (10, "MyRes/Data/MapData/SmObjectsc.Zl"),
+        (23, "MyRes/Data/MapData/Wood/Furnituresc.Zl"),
+        (25, "MyRes/Data/MapData/Wood/SmObjectsc.Zl"),
     };
 
     private sealed class Actor

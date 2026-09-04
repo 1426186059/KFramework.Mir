@@ -510,15 +510,17 @@ namespace Client.Scenes.Views
             }
         }
 
+        /// <summary>地图字节加载器：桌面版读文件，WASM 版经 mir.getBytes 取 URL（由 MirClientHost 注入）。</summary>
+        public static Func<string, byte[]> MapBytesLoader = f => File.ReadAllBytes(Path.Combine(Config.MapPath, f));
+
         private void LoadMap()
         {
             try
             {
-                var path = Path.Combine(Config.MapPath, MapInfo.FileName + ".map");
+                byte[] mapData = MapBytesLoader(MapInfo.FileName + ".map");
+                if (mapData == null || mapData.Length == 0) return;
 
-                if (!File.Exists(path)) return;
-
-                using (MemoryStream mStream = new MemoryStream(File.ReadAllBytes(path)))
+                using (MemoryStream mStream = new MemoryStream(mapData))
                 using (BinaryReader reader = new BinaryReader(mStream))
                 {
                     mStream.Seek(22, SeekOrigin.Begin);

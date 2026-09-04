@@ -167,11 +167,10 @@ namespace Client.Scenes.Views
 
         private Size GetMapSize(string fileName)
         {
-            var path = Path.Combine(Config.MapPath, fileName + ".map");
+            byte[] data = MapControl.MapBytesLoader(fileName + ".map");
+            if (data == null || data.Length == 0) return Size.Empty;
 
-            if (!File.Exists(path)) return Size.Empty;
-
-            using (FileStream stream = File.OpenRead(path))
+            using (MemoryStream stream = new MemoryStream(data))
             using (BinaryReader reader = new BinaryReader(stream))
             {
                 stream.Seek(22, SeekOrigin.Begin);
