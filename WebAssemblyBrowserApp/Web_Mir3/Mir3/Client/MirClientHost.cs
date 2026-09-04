@@ -11,6 +11,7 @@ using Client.Envir;
 using Client.Scenes;
 using Client.Scenes.Views;
 using Library;
+using MirDB;
 using Shared.Envir;
 using Shared.Rendering;
 
@@ -61,6 +62,8 @@ public static partial class MirClientHost
             MirLibrary.GetUseZlAtlasPages = () => Config.UseZlAtlasPages;
             MirLibrary.DrawCounted = () => CEnvir.DPSCounter++;
             MirLibrary.GetBytesFromUrl = MirEngine.BrowserResource.GetBytes;
+            // 数据库配置表（System.db / Users.db）与库/地图同走 HTTP 取字节；Session 内部按文件名映射到 MyRes/Data/。
+            Session.DatabaseBytesLoader = path => MirEngine.BrowserResource.GetBytes("MyRes/Data/" + System.IO.Path.GetFileName(path));
             CEnvir.SaveChatLogLine = text => MirEngine.BrowserStorage.AppendText("mir_chat_log", text);
 
             LoadLibraries();

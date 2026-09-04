@@ -131,10 +131,19 @@ namespace Client.Envir
         public void Process(G.CheckVersion p)
         {
             byte[] clientHash;
-            using (SHA256 sha256 = SHA256.Create())
+            try
             {
-                using (FileStream stream = File.OpenRead(Path.ChangeExtension(Application.ExecutablePath, ".dll")))
-                    clientHash = sha256.ComputeHash(stream);
+                using (SHA256 sha256 = SHA256.Create())
+                {
+                    using (FileStream stream = File.OpenRead(Path.ChangeExtension(Application.ExecutablePath, ".dll")))
+                        clientHash = sha256.ComputeHash(stream);
+                }
+            }
+            catch
+            {
+                // 浏览器 WASM 没有可执行文件（shim 中 Application.ExecutablePath 返回空串），
+                // 无法做 exe 哈希校验；发送占位哈希，由服务器在 ClientHash 为空（未强制）时放行。
+                clientHash = new byte[32];
             }
 
             Enqueue(new G.Version { ClientHash = clientHash });

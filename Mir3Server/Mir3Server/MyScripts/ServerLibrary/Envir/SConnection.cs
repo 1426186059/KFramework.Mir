@@ -285,7 +285,9 @@ namespace Server.Envir
         {
             if (Stage != GameStage.None) return;
 
-            if (!Functions.IsMatch(Config.ClientHash, p.ClientHash))
+            // 未配置强制客户端哈希（开发期未放置 Zircon.dll，ClientHash 为 null）时跳过版本校验，
+            // 使浏览器 WASM 客户端（无法对自身 exe 做哈希）也能通过。
+            if (Config.ClientHash != null && Config.ClientHash.Length > 0 && !Functions.IsMatch(Config.ClientHash, p.ClientHash))
             {
                 SendDisconnect(new G.Disconnect { Reason = DisconnectReason.WrongVersion });
                 return;

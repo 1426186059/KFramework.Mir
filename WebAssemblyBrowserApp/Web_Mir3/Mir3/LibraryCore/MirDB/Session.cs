@@ -23,6 +23,13 @@ namespace MirDB
         public string Root { get; }
         public SessionMode Mode { get; }
 
+        /// <summary>
+        /// 无文件系统环境（如浏览器 WASM）用来按需取数据库字节的钩子：传入类似 "X:\...\Data\System.db" 的路径，
+        /// 由调用方映射到 HTTP URL（如 MyRes/Data/System.db）；返回 null 表示文件不存在。
+        /// 未设置时回退到 System.IO.File（桌面 / 服务器）。
+        /// </summary>
+        public static Func<string, byte[]> DatabaseBytesLoader { get; set; }
+
         public bool BackUp { get; set; } = true;
         public int BackUpDelay { get; set; }
         private string BackupRoot { get; }
@@ -84,8 +91,11 @@ namespace MirDB
         {
             Assemblies = assemblies;
 
-            if (!Directory.Exists(Root))
-                Directory.CreateDirectory(Root);
+            if (DatabaseBytesLoader == null)
+            {
+                if (!Directory.Exists(Root))
+                    Directory.CreateDirectory(Root);
+            }
 
             Collections = new Dictionary<Type, ADBCollection>();
 
@@ -122,6 +132,28 @@ namespace MirDB
                 Save(true);
         }
 
+        /// <summary>
+        /// 读取数据库文件全部字节。浏览器（DatabaseBytesLoader 已设置）经 HTTP 取；否则走 System.IO.File。
+        /// 返回值与 exists 语义一致：不存在时返回 null 且 exists=false。
+        /// </summary>
+        private byte[] LoadFileBytes(string path, out bool exists)
+        {
+            if (DatabaseBytesLoader != null)
+            {
+                byte[] data = DatabaseBytesLoader(path);
+                exists = data != null && data.Length > 0;
+                return data;
+            }
+
+            exists = File.Exists(path);
+            if (!exists) return null;
+
+            using FileStream fs = File.OpenRead(path);
+            using MemoryStream ms = new MemoryStream();
+            fs.CopyTo(ms);
+            return ms.ToArray();
+        }
+
         private void InitializeSystem()
         {
             List<DBMapping> mappings = new List<DBMapping>();
@@ -147,11 +179,12 @@ namespace MirDB
                 mappings.Clear();
             }
 
-            SystemDatabaseExists = File.Exists(SystemPath);
+            byte[] systemBytes = LoadFileBytes(SystemPath, out bool systemExists);
+            SystemDatabaseExists = systemExists;
 
             if (!SystemDatabaseExists) return;
 
-            using (BinaryReader reader = Library.Encryption.GetReader(File.OpenRead(SystemPath)))
+            using (BinaryReader reader = Library.Encryption.GetReader(new MemoryStream(systemBytes)))
             {
                 int count = reader.ReadInt32();
 
@@ -203,9 +236,10 @@ namespace MirDB
             }
             mappings.Clear();
 
-            if (!File.Exists(UsersPath)) return;
+            byte[] usersBytes = LoadFileBytes(UsersPath, out bool usersExists);
+            if (!usersExists) return;
 
-            using (BinaryReader reader = Library.Encryption.GetReader(File.OpenRead(UsersPath)))
+            using (BinaryReader reader = Library.Encryption.GetReader(new MemoryStream(usersBytes)))
             {
                 int count = reader.ReadInt32();
 
@@ -230,6 +264,8 @@ namespace MirDB
 
         public void Save(bool commit)
         {
+            if (DatabaseBytesLoader != null) return; // 浏览器只读：配置库不回写
+
             bool systemChanged = HasSystemChanges();
             bool usersChanged = HasUserChanges();
             bool versionAlreadyPending = SystemVersionPending;
@@ -253,6 +289,8 @@ namespace MirDB
         }
         public void Commit()
         {
+            if (DatabaseBytesLoader != null) return; // 浏览器只读
+
             if ((Mode & SessionMode.System) == SessionMode.System && string.IsNullOrWhiteSpace(SystemDatabaseVersion))
             {
                 BumpSystemVersion();
