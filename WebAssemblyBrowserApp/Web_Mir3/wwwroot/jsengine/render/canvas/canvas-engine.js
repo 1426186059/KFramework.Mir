@@ -11,7 +11,14 @@ export const crCreateOffscreen = (w, h) => {
     return id;
 };
 
-export const crSetTarget = (id) => { gfx.cur = id === 0 ? gfx.mainTarget : gfx.offscreens.get(id); };
+export const crSetTarget = (id) => {
+    gfx.cur = id === 0 ? gfx.mainTarget : gfx.offscreens.get(id);
+    // 切换绘制表面时复位混合模式：混合状态是全局的，若上一次绘制（如灯光 LIGHTMAP/特效）
+    // 留下非 source-over 且本次未在当前表面显式 SetBlend 复位，会导致后续绘制（如窗口皮肤
+    // DrawEdges 把图叠在透明离屏上）被错误混合而失踪。灯光混合组在 SetBlend 后连续同表面绘制、
+    // 中间不切换表面，因此此处复位不影响它们。
+    gfx.blendOp = 'source-over';
+};
 
 // 把 Zircon 的 BlendMode 映射到 Canvas2D 的 globalCompositeOperation。
 // 语义取自 D3D9/D3D11 混合状态（Result = SrcBlend*Src + DstBlend*Dst）：
@@ -46,7 +53,6 @@ export const crSetBlend = (mode, rate, enabled) => {
 };
 
 export const crClear = (r, g, b, a) => {
-    if (gfx.cur === gfx.mainTarget) console.log(`[crClear] MAIN a=${a} r=${r} g=${g} b=${b}`);
     gfx.cur.ctx.clearRect(0, 0, gfx.cur.canvas.width, gfx.cur.canvas.height);
     if (a > 0) {
         gfx.cur.ctx.fillStyle = `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
@@ -56,13 +62,8 @@ export const crClear = (r, g, b, a) => {
 
 export const crDraw = (tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb) => {
     const src = gfx.textures.get(tex) || gfx.offscreens.get(tex)?.canvas;
-    const found = src ? 1 : 0;
-    const main = gfx.cur === gfx.mainTarget ? 1 : 0;
-    // 只关注：被跳过(纹理缺失)的绘制，或目标/源尺寸较大的图像绘制（如登录背景 1024x768，可能源是 1x1）
-    if (found === 0 || (sw >= 200 && sh >= 200) || (dw >= 200 && dh >= 200)) {
-        console.log(`[crDraw] tex=${tex} sw=${sw} sh=${sh} dx=${dx|0} dy=${dy|0} dw=${dw|0} dh=${dh|0} a=${((colorArgb >>> 24) & 0xFF)} found=${found} main=${main}`);
-    }
-    if (!src || sw <= 0 || sh <= 0) return;
+    if (!src) { console.warn(`[crDraw] 纹理缺失 tex=${tex} (sx=${sx} sy=${sy} sw=${sw} sh=${sh})`); return; }
+    if (sw <= 0 || sh <= 0) return;
     const ctx = gfx.cur.ctx;
     ctx.globalCompositeOperation = gfx.blendOp;
     let a = ((colorArgb >>> 24) & 0xFF) / 255;
@@ -72,17 +73,6 @@ export const crDraw = (tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb) => {
     ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
-    if (tex === 1 && main === 1 && !gfx._bgpx) {
-        gfx._bgpx = true;
-        try {
-            const pts = [[5,5],[200,150],[500,400],[900,700]];
-            const parts = pts.map(([x,y]) => {
-                const p = gfx.cur.ctx.getImageData(x, y, 1, 1).data;
-                return `(${x},${y})=${p[0]},${p[1]},${p[2]},${p[3]}`;
-            });
-            console.log(`[bgpx] canvas=${gfx.cur.canvas === dom.canvas ? 'screen' : 'OTHER'} ` + parts.join(' '));
-        } catch (e) { console.log('[bgpx] err', e.message); }
-    }
 };
 
 export const crMeasureText = (text, fontCss, maxWidth) => {
@@ -108,9 +98,4 @@ export const crDrawLine = (x1, y1, x2, y2, w, colorArgb) => {
     gfx.cur.ctx.stroke();
 };
 
-export const crFlush = () => {
-    try {
-        const p = gfx.mainTarget.ctx.getImageData(500, 400, 1, 1).data;
-        console.log(`[flushpx] (500,400)=${p[0]},${p[1]},${p[2]},${p[3]}`);
-    } catch (e) { console.log('[flushpx] err', e.message); }
-};
+export const crFlush = () => { };
