@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using Server.Envir;
@@ -351,7 +351,7 @@ namespace Server.DBModels
 
         public Stats Stats = new Stats();
 
-        protected override void OnChanged(object oldValue, object newValue, string propertyName)
+        protected internal override void OnChanged(object oldValue, object newValue, string propertyName)
         {
             base.OnChanged(oldValue, newValue, propertyName);
 
@@ -457,7 +457,7 @@ namespace Server.DBModels
             }
         }
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Info = null;
 
@@ -482,7 +482,7 @@ namespace Server.DBModels
             base.OnDeleted();
         }
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 
@@ -490,7 +490,7 @@ namespace Server.DBModels
             Slot = -1;
             Level = 1;
         }
-        protected override void OnLoaded()
+        protected internal override void OnLoaded()
         {
             base.OnLoaded();
 

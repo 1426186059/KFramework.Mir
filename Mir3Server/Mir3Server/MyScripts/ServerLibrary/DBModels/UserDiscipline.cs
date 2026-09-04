@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using System.Linq;
@@ -72,7 +72,7 @@ namespace Server.DBModels
         [Association("DisciplineMagics", true)]
         public DBBindingList<UserMagic> Magics { get; set; }
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             for (int i = Magics.Count - 1; i >= 0; i--)
             {

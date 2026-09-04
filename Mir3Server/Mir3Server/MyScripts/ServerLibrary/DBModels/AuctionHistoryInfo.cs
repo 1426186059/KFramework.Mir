@@ -1,4 +1,4 @@
-﻿using MirDB;
+using MirDB;
 
 namespace Server.DBModels
 {
@@ -81,7 +81,7 @@ namespace Server.DBModels
         private int _PartIndex;
 
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 

@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 using Server.Envir;
 using System;
@@ -120,14 +120,14 @@ namespace Server.DBModels
         [Association("Mail")]
         public DBBindingList<UserItem> Items { get; set; }
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
 
             base.OnDeleted();
         }
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 

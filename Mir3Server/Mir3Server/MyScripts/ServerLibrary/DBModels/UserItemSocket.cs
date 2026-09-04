@@ -52,7 +52,7 @@ namespace Server.DBModels
         }
         private int _Slot;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             UserItem gem = Gem;
 

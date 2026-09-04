@@ -363,7 +363,9 @@ namespace Server.Envir
                 if (character?.Account.Key != context.Request.QueryString["Key"])
                     character = null;
 
-                string response = character == null ? Properties.Resources.CharacterNotFound : Properties.Resources.BuyGameGold.Replace("$CHARACTERNAME$", character.CharacterName);
+                string response = character == null
+                    ? @"<html><body><h1>Character not found</h1></body></html>"
+                    : $@"<html><body><h1>Game gold purchased for {character.CharacterName}</h1></body></html>";
 
                 using (StreamWriter writer = new StreamWriter(context.Response.OutputStream, context.Request.ContentEncoding))
                     writer.Write(response);

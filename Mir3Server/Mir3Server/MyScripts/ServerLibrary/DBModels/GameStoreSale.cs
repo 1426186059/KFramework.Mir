@@ -1,4 +1,4 @@
-﻿using Library.SystemModels;
+using Library.SystemModels;
 using MirDB;
 using Server.Envir;
 using System;
@@ -99,7 +99,7 @@ namespace Server.DBModels
         }
         private bool _HuntGold;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Item = null;
@@ -107,7 +107,7 @@ namespace Server.DBModels
             base.OnDeleted();
         }
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 

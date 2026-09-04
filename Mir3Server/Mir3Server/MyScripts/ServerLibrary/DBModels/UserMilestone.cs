@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using System;
@@ -175,7 +175,7 @@ namespace Server.DBModels
         }
         private MagicInfo _Magic;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Character = null;
             Player = null;
@@ -268,7 +268,7 @@ namespace Server.DBModels
         }
         private bool _Claimed;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Info = null;
             Character = null;

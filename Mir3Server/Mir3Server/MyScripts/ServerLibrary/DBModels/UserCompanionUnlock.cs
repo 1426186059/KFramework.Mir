@@ -1,4 +1,4 @@
-﻿using Library.SystemModels;
+using Library.SystemModels;
 using MirDB;
 
 namespace Server.DBModels
@@ -37,7 +37,7 @@ namespace Server.DBModels
         }
         private CompanionInfo _CompanionInfo;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             CompanionInfo = null;

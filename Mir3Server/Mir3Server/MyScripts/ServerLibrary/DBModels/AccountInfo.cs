@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using Server.Envir;
@@ -623,7 +623,7 @@ namespace Server.DBModels
         public SConnection Connection;
         public string Key;
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 
@@ -639,7 +639,7 @@ namespace Server.DBModels
 
             AddDefaultCurrencies();
         }
-        protected override void OnLoaded()
+        protected internal override void OnLoaded()
         {
             base.OnLoaded();
 

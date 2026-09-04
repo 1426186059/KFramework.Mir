@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Net.Sockets;
+using System.IO;
 using System.Reflection;
 using G = Library.Network.GeneralPackets;
 
@@ -23,7 +23,7 @@ namespace Library.Network
 
         public bool AdditionalLogging;
 
-        protected TcpClient Client;
+        protected Stream Stream;
 
         public DateTime TimeConnected { get; set; }
         public TimeSpan Duration => Time.Now - TimeConnected;
@@ -49,10 +49,9 @@ namespace Library.Network
 
         public EventHandler<Exception> OnException;
 
-        protected BaseConnection(TcpClient client)
+        protected BaseConnection(Stream stream)
         {
-            Client = client;
-            Client.NoDelay = true;
+            Stream = stream;
 
             Connected = true;
             TimeConnected = Time.Now;
@@ -64,11 +63,11 @@ namespace Library.Network
         {
             try
             {
-                if (Client == null || !Client.Connected) return;
+                if (Stream == null) return;
 
                 byte[] rawBytes = new byte[8 * 1024];
 
-                Client.Client.BeginReceive(rawBytes, 0, rawBytes.Length, SocketFlags.None, ReceiveData, rawBytes);
+                Stream.BeginRead(rawBytes, 0, rawBytes.Length, ReceiveData, rawBytes);
             }
             catch (Exception ex)
             {
@@ -83,7 +82,7 @@ namespace Library.Network
             {
                 if (!Connected) return;
 
-                int dataRead = Client.Client.EndReceive(result);
+                int dataRead = Stream.EndRead(result);
 
                 if (dataRead == 0)
                 {
@@ -127,7 +126,7 @@ namespace Library.Network
             {
                 Sending = true;
                 TotalBytesSent += data.Count;
-                Client.Client.BeginSend(data.ToArray(), 0, data.Count, SocketFlags.None, SendData, null);
+                Stream.BeginWrite(data.ToArray(), 0, data.Count, SendData, null);
                 UpdateTimeOut();
             }
             catch (Exception ex)
@@ -143,7 +142,7 @@ namespace Library.Network
             try
             {
                 Sending = false;
-                Client.Client.EndSend(result);
+                Stream.EndWrite(result);
                 UpdateTimeOut();
             }
             catch (Exception ex)
@@ -172,8 +171,8 @@ namespace Library.Network
             ReceiveList = null;
             _rawData = null;
 
-            Client.Client.Dispose();
-            Client = null;
+            Stream.Dispose();
+            Stream = null;
         }
 
         public abstract void TrySendDisconnect(Packet p);
@@ -203,7 +202,7 @@ namespace Library.Network
                 Disconnecting = true;
 
                 TotalBytesSent += data.Count;
-                Client.Client.BeginSend(data.ToArray(), 0, data.Count, SocketFlags.None, SendDataDisconnect, null);
+                Stream.BeginWrite(data.ToArray(), 0, data.Count, SendDataDisconnect, null);
             }
             catch (Exception ex)
             {
@@ -216,7 +215,7 @@ namespace Library.Network
 
             try
             {
-                Client.Client.EndSend(result);
+                Stream.EndWrite(result);
             }
             catch (Exception ex)
             {
@@ -227,7 +226,7 @@ namespace Library.Network
 
         public virtual void Process()
         {
-            if (Client == null || !Client.Connected)
+            if (Stream == null)
             {
                 TryDisconnect();
                 return;

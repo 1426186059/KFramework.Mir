@@ -1,4 +1,4 @@
-﻿using Library.SystemModels;
+using Library.SystemModels;
 using MirDB;
 
 namespace Server.DBModels
@@ -67,7 +67,7 @@ namespace Server.DBModels
         }
         private long _DropCount;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Item = null;

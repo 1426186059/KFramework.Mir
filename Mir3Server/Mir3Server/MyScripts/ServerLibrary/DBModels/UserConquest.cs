@@ -1,4 +1,4 @@
-﻿using Library.SystemModels;
+using Library.SystemModels;
 using MirDB;
 using System;
 
@@ -53,13 +53,13 @@ namespace Server.DBModels
         }
         private DateTime _WarDate;
 
-        protected override void OnLoaded()
+        protected internal override void OnLoaded()
         {
             base.OnLoaded();
         }
 
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Guild = null;
             Castle = null;

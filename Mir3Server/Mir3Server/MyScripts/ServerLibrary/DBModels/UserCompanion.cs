@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using System.Linq;
@@ -226,7 +226,7 @@ namespace Server.DBModels
         public DBBindingList<UserItem> Items { get; set; }
 
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Character = null;

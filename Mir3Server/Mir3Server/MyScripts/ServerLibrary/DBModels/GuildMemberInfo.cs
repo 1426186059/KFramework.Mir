@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 using Server.Envir;
 using System;
@@ -117,7 +117,7 @@ namespace Server.DBModels
         }
         private GuildPermission _Permission;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Guild = null;

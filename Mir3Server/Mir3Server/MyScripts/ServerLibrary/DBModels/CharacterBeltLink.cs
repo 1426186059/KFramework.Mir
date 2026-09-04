@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 
 namespace Server.DBModels
@@ -68,7 +68,7 @@ namespace Server.DBModels
         }
         private int _LinkItemIndex;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Character = null;
 

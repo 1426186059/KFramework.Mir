@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using Server.Models;
@@ -141,7 +141,7 @@ namespace Server.DBModels
         [Association("Tasks", true)]
         public DBBindingList<UserQuestTask> Tasks { get; set; }
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             QuestInfo = null;
             Character = null;
@@ -169,7 +169,7 @@ namespace Server.DBModels
             };
         }
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 
@@ -230,7 +230,7 @@ namespace Server.DBModels
         [IgnoreProperty]
         public bool Completed => Amount >= Task.Amount;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Quest = null;
             Task = null;

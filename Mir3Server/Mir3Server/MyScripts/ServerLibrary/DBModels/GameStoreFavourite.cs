@@ -33,7 +33,7 @@ namespace Server.DBModels
         }
         private StoreInfo _StoreInfo;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             StoreInfo = null;

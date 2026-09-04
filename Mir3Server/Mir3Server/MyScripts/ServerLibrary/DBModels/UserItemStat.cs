@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 
 namespace Server.DBModels
@@ -67,7 +67,7 @@ namespace Server.DBModels
         }
         private StatSource _StatSource;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Item = null;
 

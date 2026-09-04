@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using Server.Envir;
@@ -167,7 +167,7 @@ namespace Server.DBModels
         [IgnoreProperty]
         public int Cost => Info.BaseCost + Level * Info.LevelCost / 3;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Info = null;
             Character = null;

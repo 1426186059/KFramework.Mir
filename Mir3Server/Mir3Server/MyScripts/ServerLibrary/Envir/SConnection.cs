@@ -9,7 +9,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using C = Library.Network.ClientPackets;
 using G = Library.Network.GeneralPackets;
 using S = Library.Network.ServerPackets;
@@ -40,9 +39,9 @@ namespace Server.Envir
 
         public StringMessages Language;
 
-        public SConnection(TcpClient client) : base(client)
+        public SConnection(Stream stream, string ipAddress) : base(stream)
         {
-            IPAddress = client.Client.RemoteEndPoint.ToString().Split(':')[0];
+            IPAddress = ipAddress;
             SessionID = ++SessionCount;
 
             Language = (StringMessages)ConfigReader.ConfigObjects[typeof(EnglishMessages)];

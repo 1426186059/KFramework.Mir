@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using Server.Envir;
@@ -310,7 +310,7 @@ namespace Server.DBModels
             };
         }
 
-        protected override void OnLoaded()
+        protected internal override void OnLoaded()
         {
             base.OnLoaded();
 
@@ -326,7 +326,7 @@ namespace Server.DBModels
             }
         }
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 
@@ -337,7 +337,7 @@ namespace Server.DBModels
             Flag = SEnvir.Random.Next(9);
         }
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Castle = null;
 

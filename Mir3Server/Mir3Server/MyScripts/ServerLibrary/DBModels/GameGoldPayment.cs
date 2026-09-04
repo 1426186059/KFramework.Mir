@@ -1,4 +1,4 @@
-﻿using MirDB;
+using MirDB;
 
 namespace Server.DBModels
 {
@@ -248,7 +248,7 @@ namespace Server.DBModels
         private bool _Error;
 
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
 

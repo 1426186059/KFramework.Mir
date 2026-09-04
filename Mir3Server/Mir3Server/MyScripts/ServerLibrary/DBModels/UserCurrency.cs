@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 
@@ -52,7 +52,7 @@ namespace Server.DBModels
             }
         }
         private AccountInfo _Account;
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Info = null;
 

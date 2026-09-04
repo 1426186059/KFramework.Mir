@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 using Server.Envir;
 using System;
@@ -116,7 +116,7 @@ namespace Server.DBModels
         private int _MaxChance;
 
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Character = null;
             Weapon = null;

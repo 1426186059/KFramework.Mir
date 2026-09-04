@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 using System;
 
@@ -190,7 +190,7 @@ namespace Server.DBModels
         }
         private int _Extra;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Character = null;
@@ -199,7 +199,7 @@ namespace Server.DBModels
         }
 
 
-        protected override void OnChanged(object oldValue, object newValue, string propertyName)
+        protected internal override void OnChanged(object oldValue, object newValue, string propertyName)
         {
             base.OnChanged(oldValue, newValue, propertyName);
 

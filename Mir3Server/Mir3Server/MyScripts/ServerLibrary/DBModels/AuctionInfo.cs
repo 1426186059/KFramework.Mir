@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 using System;
 
@@ -99,7 +99,7 @@ namespace Server.DBModels
         }
         private string _Message;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Item = null;

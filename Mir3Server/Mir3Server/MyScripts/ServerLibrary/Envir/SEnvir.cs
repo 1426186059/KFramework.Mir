@@ -96,7 +96,7 @@ namespace Server.Envir
                 _userCountListener.BeginAcceptTcpClient(CountConnection, null);
 
                 NetworkStarted = true;
-                if (log) Log($"Network Started. Listen: {Config.IPAddress}:{Config.Port}");
+                if (log) Log($"Network Started (WebSocket). Listen: {Config.IPAddress}:{Config.Port}");
             }
             catch (Exception ex)
             {
@@ -143,29 +143,39 @@ namespace Server.Envir
 
         private static void Connection(IAsyncResult result)
         {
+            TcpClient client = null;
+            WebSocketStream ws = null;
             try
             {
                 if (_listener == null || !_listener.Server.IsBound) return;
 
-                TcpClient client = _listener.EndAcceptTcpClient(result);
+                client = _listener.EndAcceptTcpClient(result);
 
                 string ipAddress = client.Client.RemoteEndPoint.ToString().Split(':')[0];
 
-                if (!IPBlocks.TryGetValue(ipAddress, out DateTime banDate) || banDate < Now)
+                // 在 TCP 流上完成 WebSocket 升级握手，之后游戏协议字节流经 WebSocket 二进制帧传输。
+                ws = WebSocketStream.Accept(client.GetStream());
+
+                if (IPBlocks.TryGetValue(ipAddress, out DateTime banDate) && banDate >= Now)
                 {
-                    SConnection Connection = new SConnection(client);
-
-                    if (Connection.Connected)
-                        NewConnections?.Enqueue(Connection);
+                    ws.Dispose();
+                    ws = null;
+                    return;
                 }
-            }
-            catch (SocketException)
-            {
 
+                SConnection Connection = new SConnection(ws, ipAddress);
+                ws = null; // 所有权移交给 SConnection，断开时由其释放
+
+                if (Connection.Connected)
+                    NewConnections?.Enqueue(Connection);
             }
             catch (Exception ex)
             {
-                Log(ex.ToString());
+                try { ws?.Dispose(); } catch { }
+                try { client?.Dispose(); } catch { }
+
+                if (!(ex is System.Net.Sockets.SocketException))
+                    Log(ex.ToString());
             }
             finally
             {

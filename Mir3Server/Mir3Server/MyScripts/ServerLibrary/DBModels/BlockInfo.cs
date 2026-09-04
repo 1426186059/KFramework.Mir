@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using MirDB;
 
 namespace Server.DBModels
@@ -53,7 +53,7 @@ namespace Server.DBModels
         }
         private string _BlockedName;
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             BlockedAccount = null;

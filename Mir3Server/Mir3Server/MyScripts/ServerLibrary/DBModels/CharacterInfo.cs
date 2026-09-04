@@ -1,4 +1,4 @@
-﻿using Library;
+using Library;
 using Library.SystemModels;
 using MirDB;
 using Server.Models;
@@ -757,7 +757,7 @@ namespace Server.DBModels
         public Dictionary<RequiredClass, int> CurrentRank = new();
         public Dictionary<RequiredClass, int> RankChange = new();
 
-        protected override void OnLoaded()
+        protected internal override void OnLoaded()
         {
             var removeList = new List<UserItem>();
 
@@ -773,7 +773,7 @@ namespace Server.DBModels
             base.OnLoaded();
         }
 
-        protected override void OnDeleted()
+        protected internal override void OnDeleted()
         {
             Account = null;
             Companion = null;
@@ -799,7 +799,7 @@ namespace Server.DBModels
             };
         }
 
-        protected override void OnCreated()
+        protected internal override void OnCreated()
         {
             base.OnCreated();
 
@@ -809,7 +809,7 @@ namespace Server.DBModels
             Observable = true;
         }
 
-        /*  protected override void OnLoaded()
+        /*  protected internal override void OnLoaded()
           {
               base.OnLoaded();
 
