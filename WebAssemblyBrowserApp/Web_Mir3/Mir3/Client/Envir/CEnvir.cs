@@ -78,8 +78,12 @@ namespace Client.Envir
         {
             LoadLanguage();
 
-            Thread workThread = new Thread(SaveChatLoop) { IsBackground = true };
-            workThread.Start();
+            // 浏览器 WASM 不支持 System.Threading.Thread.Start，聊天写盘线程在此端无意义，跳过。
+            if (!OperatingSystem.IsBrowser())
+            {
+                Thread workThread = new Thread(SaveChatLoop) { IsBackground = true };
+                workThread.Start();
+            }
 
             try
             { A(); }
@@ -391,10 +395,7 @@ namespace Client.Envir
         private static void RenderGame()
         {
             if (Target.ClientSize.Width == 0 || Target.ClientSize.Height == 0)
-            {
-                Thread.Sleep(1);
                 return;
-            }
 
             static void drawScene() => DXControl.ActiveScene?.Draw();
 
