@@ -18,5 +18,23 @@
     <Compile Remove="Mir3\RenderingCore\Rendering\SharpDXD3D11\**" />
     <Compile Remove="Mir3\RenderingCore\Rendering\SilkD3D11\**" />
     <Compile Remove="Mir3\RenderingCore\Rendering\SilkVulkan\**" />
+    <!-- GDI+ 光照/调色板生成器：仅被上面的硬件管线使用，浏览器用 Canvas 光照重写。 -->
+    <Compile Remove="Mir3\RenderingCore\Rendering\ColourPaletteHelper.cs" />
+    <Compile Remove="Mir3\RenderingCore\Rendering\LightGenerator.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WinForms / DevExpress UI 层：浏览器无对应物，将由 Canvas 重写。原版文件保留在工程内作移植参考，暂不进编译。 -->
+    <Compile Remove="Mir3\Client\Controls\**" />
+    <Compile Remove="Mir3\Client\Scenes\**" />
+    <Compile Remove="Mir3\Client\Envir\**" />
+    <Compile Remove="Mir3\Client\Models\**" />
+    <Compile Remove="Mir3\Client\UserModels\**" />
+    <Compile Remove="Mir3\Client\Extensions\**" />
+    <Compile Remove="Mir3\Client\GlobalUsings.cs" />
+    <Compile Remove="Mir3\Client\TargetForm.cs" />
+    <Compile Remove="Mir3\Client\Program.cs" />
+    <!-- ImageManager：离线 .Zl 打包工具，依赖 System.Drawing.Bitmap / ManagedSquish，浏览器不需要。 -->
+    <Compile Remove="Mir3\ImageManager\**" />
   </ItemGroup>
 </Project>
