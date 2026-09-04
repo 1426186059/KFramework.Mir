@@ -38,4 +38,12 @@
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- MyRes / jsengine 资源：设为“如果较新则复制到输出目录”。
+         这会让静态资源收集在下次构建时重新纳入这些文件（修正增量缓存漏掉导致 404 的问题），
+         同时也把文件落到 bin 输出目录。用 Update 而非 Include，避免与 SDK 自动纳入的 wwwroot 项重复。 -->
+    <Content Update="wwwroot\MyRes\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\jsengine\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
