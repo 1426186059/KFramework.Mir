@@ -62,6 +62,9 @@ namespace Client.Envir
 
         public static ConcurrentQueue<string> ChatLog = new ConcurrentQueue<string>();
 
+        /// <summary>聊天日志落盘钩子：浏览器端由 MirClientHost 接到 mir.appendChatLog（写 localStorage）；桌面端不设则跳过。</summary>
+        public static Action<string> SaveChatLogLine;
+
         public static bool Loaded;
         public static bool DatabaseLoadAttempted;
         public static bool Loading { get; private set; }
@@ -78,12 +81,9 @@ namespace Client.Envir
         {
             LoadLanguage();
 
-            // 浏览器 WASM 不支持 System.Threading.Thread.Start，聊天写盘线程在此端无意义，跳过。
-            if (!OperatingSystem.IsBrowser())
-            {
-                Thread workThread = new Thread(SaveChatLoop) { IsBackground = true };
-                workThread.Start();
-            }
+            // 浏览器无 System.Threading.Thread，聊天日志改用异步循环（Task.Delay 在 WASM 受支持），
+            // 落盘经 SaveChatLogLine 钩子写到 localStorage（桌面端未挂该钩子时自动跳过）。
+            StartChatSaveLoop();
 
             try
             { A(); }
@@ -175,26 +175,25 @@ namespace Client.Envir
 
         }
 
-        public static void SaveChatLoop()
+        public static async void StartChatSaveLoop()
         {
             List<string> lines = new List<string>();
+
             while (true)
             {
                 while (ChatLog.IsEmpty)
-                    Thread.Sleep(1000);
+                    await Task.Delay(1000);
 
                 while (!ChatLog.IsEmpty)
                 {
-                    string line;
-
-                    if (!ChatLog.TryDequeue(out line)) continue;
+                    if (!ChatLog.TryDequeue(out string line)) continue;
 
                     lines.Add(line);
                 }
 
                 try
                 {
-                    File.AppendAllLines(@".\Chat Logs.txt", lines);
+                    SaveChatLogLine?.Invoke(string.Join("\n", lines) + "\n");
                     lines.Clear();
                 }
                 catch

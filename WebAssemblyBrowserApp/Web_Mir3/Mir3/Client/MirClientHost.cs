@@ -89,6 +89,7 @@ public static partial class MirClientHost
             MirLibrary.GetUseZlAtlasPages = () => Config.UseZlAtlasPages;
             MirLibrary.DrawCounted = () => CEnvir.DPSCounter++;
             MirLibrary.GetBytesFromUrl = GetBytes;
+            CEnvir.SaveChatLogLine = text => MirEngine.BrowserStorage.AppendText("mir_chat_log", text);
 
             LoadLibraries();
 
@@ -123,6 +124,7 @@ public static partial class MirClientHost
             DXControl.ActiveScene = new LoginScene(Config.ExtendedLogin ? Config.GameSize : Config.IntroSceneSize);
 
             _ready = true;
+            ConfigureInput();
             MirLog("[Mir] 真实 Zircon 客户端初始化完成（CMain 等价驱动器已就绪）。");
         }
         catch (Exception ex)
@@ -165,86 +167,36 @@ public static partial class MirClientHost
     }
 
     // ===================== 输入 =====================
+    // 浏览器键鼠输入统一经 JSBind/BrowserInput 封装：DOM 事件 -> WinForms 风格 EventArgs -> C# 事件，
+    // 此处仅做订阅与路由（复刻原 On* 的行为：设置 MouseLocation 并转发到 ActiveScene）。
 
-    [JSExport]
-    public static void OnMouseDown(int button, int x, int y)
+    private static void ConfigureInput()
     {
-        if (!_ready) return;
-        CEnvir.MouseLocation = new Point(x, y);
-        DXControl.ActiveScene?.OnMouseDown(new MouseEventArgs((MouseButtons)button, 1, x, y, 0));
-    }
+        MirEngine.BrowserInput.Attach();
 
-    [JSExport]
-    public static void OnMouseMove(int x, int y)
-    {
-        if (!_ready) return;
-        CEnvir.MouseLocation = new Point(x, y);
-        DXControl.ActiveScene?.OnMouseMove(new MouseEventArgs(MouseButtons.None, 0, x, y, 0));
-    }
-
-    [JSExport]
-    public static void OnMouseUp(int button, int x, int y)
-    {
-        if (!_ready) return;
-        DXControl.ActiveScene?.OnMouseUp(new MouseEventArgs((MouseButtons)button, 1, x, y, 0));
-        DXControl.ActiveScene?.OnMouseClick(new MouseEventArgs((MouseButtons)button, 1, x, y, 0));
-    }
-
-    [JSExport]
-    public static void OnMouseWheel(int delta, int x, int y)
-    {
-        if (!_ready) return;
-        CEnvir.MouseLocation = new Point(x, y);
-        DXControl.ActiveScene?.OnMouseWheel(new MouseEventArgs(MouseButtons.None, 0, x, y, delta));
-    }
-
-    [JSExport]
-    public static void OnKeyDown(string key)
-    {
-        if (!_ready) return;
-        Keys k = ToKeys(key);
-        if (k == Keys.None) return;
-        DXControl.ActiveScene?.OnKeyDown(new KeyEventArgs(k));
-    }
-
-    [JSExport]
-    public static void OnKeyUp(string key)
-    {
-        if (!_ready) return;
-        Keys k = ToKeys(key);
-        if (k == Keys.None) return;
-        DXControl.ActiveScene?.OnKeyUp(new KeyEventArgs(k));
-    }
-
-    [JSExport]
-    public static void OnKeyPress(string key)
-    {
-        if (!_ready || string.IsNullOrEmpty(key)) return;
-        DXControl.ActiveScene?.OnKeyPress(new KeyPressEventArgs(key[0]));
-    }
-
-    /// <summary>供 demo 兼容：单事件入口转发为 KeyDown。</summary>
-    [JSExport]
-    public static void OnKey(string key) => OnKeyDown(key);
-
-    private static readonly Dictionary<string, Keys> SpecialKeys = new Dictionary<string, Keys>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "arrowup", Keys.Up }, { "arrowdown", Keys.Down }, { "arrowleft", Keys.Left }, { "arrowright", Keys.Right },
-        { "escape", Keys.Escape }, { "enter", Keys.Return }, { "return", Keys.Return }, { "tab", Keys.Tab },
-        { " " , Keys.Space }, { "spacebar", Keys.Space }, { "backspace", Keys.Back }, { "delete", Keys.Delete },
-        { "shift", Keys.ShiftKey }, { "control", Keys.ControlKey }, { "alt", Keys.Menu },
-        { "f1", Keys.F1 }, { "f2", Keys.F2 }, { "f3", Keys.F3 }, { "f4", Keys.F4 }, { "f5", Keys.F5 },
-        { "f6", Keys.F6 }, { "f7", Keys.F7 }, { "f8", Keys.F8 }, { "f9", Keys.F9 }, { "f10", Keys.F10 },
-        { "f11", Keys.F11 }, { "f12", Keys.F12 },
-    };
-
-    private static Keys ToKeys(string key)
-    {
-        if (string.IsNullOrEmpty(key)) return Keys.None;
-        if (SpecialKeys.TryGetValue(key, out Keys sp)) return sp;
-        if (Enum.TryParse<Keys>(key, true, out Keys parsed)) return parsed;
-        if (key.Length == 1) return (Keys)char.ToUpperInvariant(key[0]);
-        return Keys.None;
+        MirEngine.BrowserInput.MouseDown += (s, e) =>
+        {
+            CEnvir.MouseLocation = new Point(e.X, e.Y);
+            DXControl.ActiveScene?.OnMouseDown(e);
+        };
+        MirEngine.BrowserInput.MouseMove += (s, e) =>
+        {
+            CEnvir.MouseLocation = new Point(e.X, e.Y);
+            DXControl.ActiveScene?.OnMouseMove(e);
+        };
+        MirEngine.BrowserInput.MouseUp += (s, e) =>
+        {
+            DXControl.ActiveScene?.OnMouseUp(e);
+            DXControl.ActiveScene?.OnMouseClick(e);
+        };
+        MirEngine.BrowserInput.MouseWheel += (s, e) =>
+        {
+            CEnvir.MouseLocation = new Point(e.X, e.Y);
+            DXControl.ActiveScene?.OnMouseWheel(e);
+        };
+        MirEngine.BrowserInput.KeyDown += (s, e) => DXControl.ActiveScene?.OnKeyDown(e);
+        MirEngine.BrowserInput.KeyUp += (s, e) => DXControl.ActiveScene?.OnKeyUp(e);
+        MirEngine.BrowserInput.KeyPress += (s, e) => DXControl.ActiveScene?.OnKeyPress(e);
     }
 
     // ===================== 渲染宿主设置（复刻 Client/Program.cs 的 CreateRenderingHostSettings）=====================

@@ -159,6 +159,39 @@ setModuleImports('main.js', {
 
         log: (message) => { console.log(message); },
 
+        // 浏览器持久化（localStorage），对应 JSBind/BrowserStorage.cs。
+        storageAppend: (key, text) => {
+            try { localStorage.setItem(key, (localStorage.getItem(key) || '') + text); } catch (e) { }
+        },
+        storageGet: (key) => {
+            try { return localStorage.getItem(key) || ''; } catch (e) { return ''; }
+        },
+        storageRemove: (key) => {
+            try { localStorage.removeItem(key); } catch (e) { }
+        },
+
+        // 输入监听注册（对应 JSBind/BrowserInput.cs）。由 C# 在 Init 时调用 Attach()。
+        inputAttach: () => {
+            if (_inputAttached) return;
+            canvas.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+            canvas.addEventListener('wheel', onWheel, { passive: true });
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            _inputAttached = true;
+        },
+        inputDetach: () => {
+            if (!_inputAttached) return;
+            canvas.removeEventListener('mousedown', onMouseDown);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            canvas.removeEventListener('wheel', onWheel);
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+            _inputAttached = false;
+        },
+
         // 资源已在启动时下载完毕，这里同步返回给 C#
         // 按需同步拉取：首次访问某资源时才发起请求（XMLHttpRequest 同步模式），并缓存到 assets。
         // 这样启动期不必下载 GB 级的全部 .Zl / .map，仅在首次绘制对应资源时按需获取。
@@ -271,42 +304,38 @@ if (!game) {
     loading.innerHTML = '<div style="color:#e06c75">初始化失败：未找到客户端导出（详见控制台）</div>';
     throw new Error('client export not found');
 }
-const useDetailedKey = typeof game.OnKeyDown === 'function';
-
-// ---------- 输入 ----------
-const toCanvas = (e) => {
+// ---------- 输入（由 JSBind/BrowserInput.cs 经 mir.inputAttach 注册）----------
+// 这里只做 DOM 事件 -> BrowserInput 导出方法的转发；键名/按钮的语义翻译在 C# 端完成。
+let _inputAttached = false;
+function canvasToClient(e) {
     const r = canvas.getBoundingClientRect();
     return [
         Math.round((e.clientX - r.left) * canvas.width / r.width),
         Math.round((e.clientY - r.top) * canvas.height / r.height),
     ];
-};
-
-canvas.addEventListener('mousedown', (e) => {
-    const [x, y] = toCanvas(e);
-    game.OnMouseDown(e.button, x, y);
-});
-window.addEventListener('mousemove', (e) => {
-    const [x, y] = toCanvas(e);
-    game.OnMouseMove(x, y);
-});
-window.addEventListener('mouseup', (e) => {
-    const [x, y] = toCanvas(e);
-    game.OnMouseUp(e.button, x, y);
-});
-canvas.addEventListener('wheel', (e) => {
-    const [x, y] = toCanvas(e);
-    if (typeof game.OnMouseWheel === 'function') game.OnMouseWheel(e.deltaY, x, y);
-}, { passive: true });
-
-if (useDetailedKey) {
-    window.addEventListener('keydown', (e) => {
-        game.OnKeyDown(e.key);
-        if (e.key.length === 1) game.OnKeyPress(e.key);
-    });
-    window.addEventListener('keyup', (e) => game.OnKeyUp(e.key));
-} else {
-    window.addEventListener('keydown', (e) => game.OnKey(e.key.toLowerCase()));
+}
+function onMouseDown(e) {
+    const [x, y] = canvasToClient(e);
+    exports.MirEngine.BrowserInput.OnMouseDown(e.button, x, y);
+}
+function onMouseMove(e) {
+    const [x, y] = canvasToClient(e);
+    exports.MirEngine.BrowserInput.OnMouseMove(x, y);
+}
+function onMouseUp(e) {
+    const [x, y] = canvasToClient(e);
+    exports.MirEngine.BrowserInput.OnMouseUp(e.button, x, y);
+}
+function onWheel(e) {
+    const [x, y] = canvasToClient(e);
+    exports.MirEngine.BrowserInput.OnMouseWheel(e.deltaY, x, y);
+}
+function onKeyDown(e) {
+    exports.MirEngine.BrowserInput.OnKeyDown(e.key);
+    if (e.key.length === 1) exports.MirEngine.BrowserInput.OnKeyPress(e.key);
+}
+function onKeyUp(e) {
+    exports.MirEngine.BrowserInput.OnKeyUp(e.key);
 }
 
 // ---------- 启动 ----------
