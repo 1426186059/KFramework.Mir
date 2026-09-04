@@ -64,6 +64,23 @@ export function fetchBytes(url) {
     } catch (e) { return null; }
 }
 
+// 异步预取一组 URL 到资源缓存（不阻塞主线程）。
+// 预取完成后，同步 getBytes 命中缓存即瞬时返回，避免加载 DB / 资源时因同步 XHR 冻结主线程导致心跳超时。
+export async function preloadAssets(urls) {
+    const tasks = [];
+    for (const raw of urls) {
+        if (!raw || host.assets.has(raw)) continue;
+        const fetchUrl = raw.replace(/ /g, '%20');
+        tasks.push(
+            fetch(fetchUrl)
+                .then(r => (r.ok ? r.arrayBuffer() : null))
+                .then(buf => { if (buf) host.assets.set(raw, new Uint8Array(buf)); })
+                .catch(() => { /* 预取失败则回退同步 XHR，不影响流程 */ })
+        );
+    }
+    await Promise.all(tasks);
+}
+
 export function ensureAudio() {
     if (!audio.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;

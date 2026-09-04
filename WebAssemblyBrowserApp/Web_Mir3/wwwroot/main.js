@@ -1,5 +1,5 @@
 import { dotnet } from './_framework/dotnet.js';
-import { host, dom } from './jsengine/shared.js';
+import { host, dom, preloadAssets } from './jsengine/shared.js';
 
 // 各输入 / 渲染 / 存储模块（每个对应 JSBind 里的一个 C# 类）。
 import * as storage from './jsengine/core/storage.js';
@@ -46,6 +46,21 @@ const loadText = document.getElementById('loadText');
 try {
     loadText.textContent = '正在初始化客户端（资源按需加载）…';
     game.Init();
+
+    // 启动前异步预热数据库（System.db / Users.db）：避免连接后 LoadDatabase 的同步取字节冻结主线程 → 心跳超时。
+    // 预取为异步 fetch，不阻塞主线程；完成后同步 getBytes 命中缓存即瞬时返回。
+    if (typeof game.GetPreloadUrls === 'function') {
+        try {
+            const preload = game.GetPreloadUrls();
+            if (preload && preload.length) {
+                loadText.textContent = '正在预加载数据库…';
+                await preloadAssets(preload);
+            }
+        } catch (e) {
+            console.warn('DB 预加载失败，将回退为同步取字节', e);
+        }
+    }
+
     dom.loading.style.display = 'none';
 
     requestAnimationFrame(function loop(t) {

@@ -49,6 +49,22 @@ public static partial class MirClientHost
         return urls.ToArray();
     }
 
+    /// <summary>
+    /// 启动期预加载清单：仅包含连接前必须、且同步取会冻结主线程导致心跳超时的资源——
+    /// 数据库配置表 System.db / Users.db。main.js 在 game.Init() 后用异步 fetch 预热进 host.assets 缓存，
+    /// 之后 LoadDatabase 经同步 getBytes 命中缓存即瞬时返回，不再阻塞主线程。
+    /// 库/地图等仍走按需懒加载（避免 GB 级预下载）。
+    /// </summary>
+    [JSExport]
+    public static string[] GetPreloadUrls()
+    {
+        return new[]
+        {
+            "MyRes/Data/System.db",
+            "MyRes/Data/Users.db",
+        };
+    }
+
     [JSExport]
     public static void Init()
     {
