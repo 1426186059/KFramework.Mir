@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Runtime.InteropServices.JavaScript;
 
 namespace MirEngine;
@@ -14,6 +15,15 @@ internal static partial class BrowserResource
     [JSImport("mir.log", "main.js")]
     private static partial void LogImpl(string message);
 
-    public static byte[] GetBytes(string url) => GetBytesImpl(url);
+    private static readonly HashSet<string> _logged404 = new HashSet<string>();
+
+    public static byte[] GetBytes(string url)
+    {
+        byte[] data = GetBytesImpl(url);
+        if ((data == null || data.Length == 0) && _logged404.Add(url))
+            Log($"[Mir] 资源加载失败(404?): {url}");
+        return data;
+    }
+
     public static void Log(string message) => LogImpl(message);
 }

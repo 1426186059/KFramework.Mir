@@ -25,8 +25,10 @@ namespace Shared.Rendering
         //   LockTexture 钉住一块 RGBA 缓冲，调用方把（DXT 或已解压的）字节拷进来；
         //   解锁时把缓冲解码为 RGBA 并上传到 canvas（mir.createImage）。
         private int _nextImageId = 1;
+        private int _mainClearLogCount = 0;
         private readonly Dictionary<int, Size> _textureSizes = new Dictionary<int, Size>();
         private readonly Dictionary<int, RenderTextureFormat> _textureFormats = new Dictionary<int, RenderTextureFormat>();
+        private static int _texLogCount = 0;
 
         // 无效纹理返回占位锁，避免使用零指针触发 TextureLock.From 的异常。
         private static readonly byte[] _sentinel = new byte[1];
@@ -46,6 +48,7 @@ namespace Shared.Rendering
         public void Initialize(RenderingPipelineContext context)
         {
             _context = context;
+            _currentSurfaceId = BrowserCanvas.MainTarget;
             BrowserCanvas.SetTarget(BrowserCanvas.MainTarget);
         }
 
@@ -56,6 +59,7 @@ namespace Shared.Rendering
 
         public bool RenderFrame(Action drawScene)
         {
+            _currentSurfaceId = BrowserCanvas.MainTarget;
             BrowserCanvas.SetTarget(BrowserCanvas.MainTarget);
             drawScene();
             BrowserCanvas.Flush();
@@ -161,8 +165,22 @@ namespace Shared.Rendering
             _currentSurfaceId = (int)surface.NativeHandle;
             BrowserCanvas.SetTarget(_currentSurfaceId);
         }
-        public RenderSurface GetScratchSurface() => RenderSurface.From(BrowserCanvas.MainTarget);
-        public RenderTexture GetScratchTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
+        // 离屏“临时画布”：原版 Zircon 用一块与主画布同尺寸的共享 Scratch 缓冲，
+        // 供 DXButton / DXTabControl 等控件临时绘制后再合成到目标。这里必须返回真正的离屏
+        // 纹理，绝不能返回 MainTarget（id=0）——否则控件会直接画到主画布上，且其 Clear 会把
+        // 主画布（含登录背景）整屏抹黑。
+        private RenderTargetResource _scratchTarget;
+        private RenderTargetResource ScratchTarget
+        {
+            get
+            {
+                if (!_scratchTarget.Surface.IsValid)
+                    _scratchTarget = CreateRenderTarget(_backBufferSize);
+                return _scratchTarget;
+            }
+        }
+        public RenderSurface GetScratchSurface() => ScratchTarget.Surface;
+        public RenderTexture GetScratchTexture() => ScratchTarget.Texture;
 
         public void ColorFill(RenderSurface surface, Rectangle rectangle, Color colorFill)
         {
@@ -186,6 +204,11 @@ namespace Shared.Rendering
 
         public void Clear(RenderClearFlags flags, Color colour, float z, int stencil, params Rectangle[] regions)
         {
+            if (_currentSurfaceId == BrowserCanvas.MainTarget && _mainClearLogCount < 15)
+            {
+                _mainClearLogCount++;
+                BrowserResource.Log("[C#-ClearMain] cur=" + _currentSurfaceId + " stack:\n" + Environment.StackTrace);
+            }
             BrowserCanvas.Clear(colour.R, colour.G, colour.B, colour.A);
         }
 
@@ -249,10 +272,20 @@ namespace Shared.Rendering
                         rgba = buffer;
                     }
 
+                    if (_texLogCount < 15)
+                    {
+                        _texLogCount++;
+                        int nz = 0;
+                        int lim = Math.Min(rgba.Length, 4096);
+                        for (int i = 0; i < lim; i++) if (rgba[i] != 0) nz++;
+                        BrowserResource.Log($"[Mir][Tex] #{_texLogCount} id={id} fmt={format} {w}x{h} len={rgba.Length} nonzero={nz}/{lim}");
+                    }
+
                     BrowserCanvas.UploadImage(id, rgba, w, h);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    if (_texLogCount < 15) { _texLogCount++; BrowserResource.Log($"[Mir][Tex] 上传异常 id={id} fmt={format}: {ex.Message}"); }
                     // 单张纹理上传失败不应中断整帧
                 }
             });
@@ -267,11 +300,22 @@ namespace Shared.Rendering
 
         public void MemoryClear() { }
 
-        public RenderTexture GetColourPaletteTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
+        // 这些纹理同样必须返回真正的离屏纹理（原版返回的是 1x1 调色板/光照缓冲），
+        // 返回 MainTarget(id=0) 会让使用方拿到无效纹理（crDraw 时 found=0 被跳过）。
+        private RenderTexture _colourPaletteTexture;
+        private RenderTexture _lightTexture;
+        private RenderTexture _poisonTexture;
+        private RenderTexture GetCachedTexture(ref RenderTexture field)
+        {
+            if (!field.IsValid)
+                field = CreateRenderTarget(new Size(1, 1)).Texture;
+            return field;
+        }
+        public RenderTexture GetColourPaletteTexture() => GetCachedTexture(ref _colourPaletteTexture);
         public byte[] GetColourPaletteData() => Array.Empty<byte>();
-        public RenderTexture GetLightTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
+        public RenderTexture GetLightTexture() => GetCachedTexture(ref _lightTexture);
         public Size GetLightTextureSize() => new Size(1, 1);
-        public RenderTexture GetPoisonTexture() => RenderTexture.From(BrowserCanvas.MainTarget);
+        public RenderTexture GetPoisonTexture() => GetCachedTexture(ref _poisonTexture);
         public Size GetPoisonTextureSize() => new Size(1, 1);
 
         public TextureFilterMode GetTextureFilter() => _textureFilter;
