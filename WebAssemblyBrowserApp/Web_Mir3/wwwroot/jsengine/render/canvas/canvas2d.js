@@ -56,9 +56,41 @@ export const clear = (argb) => {
 
 export const setStatus = (html) => { dom.panel.innerHTML = html; };
 
-// 在离屏 canvas 上渲染文字（描边/渐变/对齐），取 RGBA 后注册为纹理句柄。
-// 对应 C# 端 MirEngine.BrowserCanvas.DrawLabel（替代 DXLabel/DXTextBox 的 GDI 文本烘焙）。
-// format 位：HorizontalCenter=1, Right=2, VerticalCenter=4, Bottom=8。
+// 按宽度折行：英文按空格分词，超长单词/中文（无空格）按字符断行；保留 \n 硬换行。
+function wrapLines(ctx, text, maxWidth) {
+    const out = [];
+    const paras = (text || '').split('\n');
+    for (const para of paras) {
+        if (para.length === 0) { out.push(''); continue; }
+        let line = '';
+        const tokens = para.split(' ');
+        for (let i = 0; i < tokens.length; i++) {
+            const word = tokens[i];
+            const candidate = line === '' ? word : line + ' ' + word;
+            if (line === '' || ctx.measureText(candidate).width <= maxWidth) {
+                line = candidate;
+            } else {
+                out.push(line);
+                if (ctx.measureText(word).width > maxWidth) {
+                    let piece = '';
+                    for (const ch of word) {
+                        if (piece !== '' && ctx.measureText(piece + ch).width > maxWidth) { out.push(piece); piece = ch; }
+                        else piece += ch;
+                    }
+                    line = piece;
+                } else {
+                    line = word;
+                }
+            }
+        }
+        out.push(line);
+    }
+    return out;
+}
+
+// 在离屏 canvas 上渲染文字（多行折行/描边/渐变/对齐），取 RGBA 后注册为纹理句柄。
+// 对应 C# 端 MirEngine.BrowserCanvas.DrawLabel。
+// format 位：HorizontalCenter=1, Right=2, VerticalCenter=4, Bottom=8, WordBreak=16。
 export const drawLabel = (handle, w, h, text, fontCss, foreArgb, outlineArgb, format, backArgb, gradTopArgb, gradBottomArgb, gradient) => {
     w = Math.max(1, w | 0); h = Math.max(1, h | 0);
     const cv = document.createElement('canvas');
@@ -74,32 +106,85 @@ export const drawLabel = (handle, w, h, text, fontCss, foreArgb, outlineArgb, fo
     const right = (format & 2) !== 0;
     const verticalCenter = (format & 4) !== 0;
     const bottom = (format & 8) !== 0;
+    const wordBreak = (format & 16) !== 0;
     const fs = parseInt((fontCss.match(/(\d+)(px|pt)/) || [])[1] || 12);
     const lineHeight = fs * 1.3;
-    const textWidth = c.measureText(text).width;
+    const pad = 1;
 
-    let x = 1;
-    if (horizontalCenter) x = Math.max(0, (w - textWidth) / 2);
-    else if (right) x = Math.max(0, w - textWidth - 1);
-    let y = 0;
-    if (verticalCenter) y = Math.max(0, (h - lineHeight) / 2);
-    else if (bottom) y = Math.max(0, h - lineHeight);
+    const lines = wordBreak ? wrapLines(c, text, Math.max(1, w - pad * 2)) : (text || '').split('\n');
+    const totalHeight = lines.length * lineHeight;
 
-    const drawText = (argb, ox, oy) => { c.fillStyle = toCss(argb); c.fillText(text, x + ox, y + oy); };
+    let startY;
+    if (verticalCenter) startY = Math.max(0, (h - totalHeight) / 2);
+    else if (bottom) startY = Math.max(0, h - totalHeight);
+    else startY = 0;
+
     const ox = outlineArgb >= 0 ? 1 : 0;
     const oy = outlineArgb >= 0 ? 1 : 0;
+    const drawText = (line, lx, ly, argb) => { c.fillStyle = toCss(argb); c.fillText(line, lx, ly); };
 
-    if (outlineArgb >= 0) {
-        drawText(outlineArgb, 1, 0); drawText(outlineArgb, 0, 1); drawText(outlineArgb, 2, 1); drawText(outlineArgb, 1, 2);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const lw = c.measureText(line).width;
+        let lx = pad;
+        if (horizontalCenter) lx = Math.max(pad, (w - lw) / 2);
+        else if (right) lx = Math.max(pad, w - lw - pad);
+
+        const lyBase = startY + i * lineHeight;
+        if (outlineArgb >= 0) {
+            drawText(line, lx + 1, lyBase, outlineArgb);
+            drawText(line, lx, lyBase + 1, outlineArgb);
+            drawText(line, lx + 2, lyBase + 1, outlineArgb);
+            drawText(line, lx + 1, lyBase + 2, outlineArgb);
+        }
+        const ly = lyBase + oy;
+        if (gradient) {
+            const g = c.createLinearGradient(0, 0, 0, h);
+            g.addColorStop(0, toCss(gradTopArgb));
+            g.addColorStop(1, toCss(gradBottomArgb));
+            c.fillStyle = g;
+            c.fillText(line, lx + ox, ly);
+        } else {
+            drawText(line, lx + ox, ly, foreArgb);
+        }
     }
-    if (gradient) {
-        const g = c.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, toCss(gradTopArgb));
-        g.addColorStop(1, toCss(gradBottomArgb));
-        c.fillStyle = g;
-        c.fillText(text, x + ox, y + oy);
-    } else {
-        drawText(foreArgb, ox, oy);
+
+    createImage(handle, new Uint8ClampedArray(c.getImageData(0, 0, w, h).data), w, h);
+};
+
+// 文本框文字渲染：背景 + 选择高亮矩形 + 文本 + 光标竖条。对应 C# 端 MirEngine.BrowserCanvas.DrawTextBox。
+export const drawTextBox = (handle, w, h, text, fontCss, foreArgb, backArgb, selBackArgb, caretArgb, selStart, selLength, caretPos, caretVisible, verticalCenter) => {
+    w = Math.max(1, w | 0); h = Math.max(1, h | 0);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const c = cv.getContext('2d');
+    c.clearRect(0, 0, w, h);
+    if (backArgb >= 0) { c.fillStyle = toCss(backArgb); c.fillRect(0, 0, w, h); }
+    if (!text) { createImage(handle, new Uint8ClampedArray(c.getImageData(0, 0, w, h).data), w, h); return; }
+
+    c.font = fontCss;
+    c.textBaseline = 'top';
+    const fs = parseInt((fontCss.match(/(\d+)(px|pt)/) || [])[1] || 12);
+    const lineHeight = fs * 1.3;
+    const padX = 1;
+    const top = verticalCenter ? Math.max(0, (h - lineHeight) / 2) : 0;
+    const xOf = (i) => padX + c.measureText(text.substring(0, i)).width;
+
+    if (selLength > 0 && selBackArgb >= 0) {
+        const s = Math.min(selStart, selStart + selLength);
+        const e = Math.max(selStart, selStart + selLength);
+        const sx = xOf(s), ex = xOf(e);
+        c.fillStyle = toCss(selBackArgb);
+        c.fillRect(sx, top, Math.max(1, ex - sx), lineHeight);
+    }
+
+    c.fillStyle = toCss(foreArgb);
+    c.fillText(text, padX, top);
+
+    if (caretVisible) {
+        const cx = xOf(caretPos);
+        c.fillStyle = toCss(caretArgb);
+        c.fillRect(cx, top, Math.max(1, Math.round(fs / 12)), lineHeight);
     }
 
     createImage(handle, new Uint8ClampedArray(c.getImageData(0, 0, w, h).data), w, h);

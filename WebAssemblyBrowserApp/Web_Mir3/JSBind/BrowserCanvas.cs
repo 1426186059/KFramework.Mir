@@ -78,4 +78,12 @@ internal static partial class BrowserCanvas
 
     public static void DrawLabel(int handle, int w, int h, string text, string fontCss, int foreArgb, int outlineArgb, int format, int backArgb, int gradTopArgb, int gradBottomArgb, bool gradient)
         => DrawLabelImpl(handle, w, h, text, fontCss, foreArgb, outlineArgb, format, backArgb, gradTopArgb, gradBottomArgb, gradient);
+
+    /// <summary>在离屏 canvas 上把文本框内容（背景+选择高亮+文本+光标）渲染成纹理句柄。
+    /// 对应 jsengine/render/canvas/canvas2d.js 的 mir.drawTextBox。</summary>
+    [JSImport("mir.drawTextBox", "main.js")]
+    private static partial void DrawTextBoxImpl(int handle, int w, int h, string text, string fontCss, int foreArgb, int backArgb, int selBackArgb, int caretArgb, int selStart, int selLength, int caretPos, bool caretVisible, bool verticalCenter);
+
+    public static void DrawTextBox(int handle, int w, int h, string text, string fontCss, int foreArgb, int backArgb, int selBackArgb, int caretArgb, int selStart, int selLength, int caretPos, bool caretVisible, bool verticalCenter)
+        => DrawTextBoxImpl(handle, w, h, text, fontCss, foreArgb, backArgb, selBackArgb, caretArgb, selStart, selLength, caretPos, caretVisible, verticalCenter);
 }

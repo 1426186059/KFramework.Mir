@@ -289,6 +289,8 @@ namespace Client.Controls
         #region Methods
 
         private RenderTexture _textBoxTextureHandle;
+        private bool _caretVisible;
+        private DateTime _caretToggle = DateTime.MinValue;
 
         protected override void CreateTexture()
         {
@@ -302,19 +304,43 @@ namespace Client.Controls
                 RenderingPipelineManager.RegisterControlCache(this);
             }
 
-            // 浏览器端用 Canvas 渲染文本框文字（见 BrowserCanvas.DrawLabel / mir.drawLabel），
+            // 浏览器端用 Canvas 渲染文本框文字（见 BrowserCanvas.DrawTextBox / mir.drawTextBox），
             // 不再使用 GDI 的 Bitmap/Graphics/TextBox.DrawToBitmap（WASM 无 gdiplus.dll）。
             string textBoxDisplay = TextBox.UseSystemPasswordChar
                 ? new string('*', TextBox.Text?.Length ?? 0)
                 : (TextBox.Text ?? string.Empty);
             int tbFore = TextBox.ForeColor.IsEmpty ? Color.White.ToArgb() : TextBox.ForeColor.ToArgb();
             int tbBack = TextBox.BackColor.IsEmpty ? -1 : TextBox.BackColor.ToArgb();
-            MirEngine.BrowserCanvas.DrawLabel((int)_textBoxTextureHandle.NativeHandle, DisplayArea.Width, DisplayArea.Height,
-                textBoxDisplay, Font.ToCss(), tbFore, -1, 4 /*VerticalCenter*/, tbBack, -1, -1, false);
+            int selBack = Color.FromArgb(255, 51, 153, 255).ToArgb();
+            bool focused = CEnvir.Target.ActiveControl == TextBox && !ReadOnly;
+            MirEngine.BrowserCanvas.DrawTextBox((int)_textBoxTextureHandle.NativeHandle, DisplayArea.Width, DisplayArea.Height,
+                textBoxDisplay, Font.ToCss(), tbFore, tbBack, selBack, tbFore,
+                TextBox.SelectionStart, TextBox.SelectionLength, TextBox.SelectionStart, _caretVisible && focused, true);
 
             TextureValid = true;
             ExpireTime = CEnvir.Now + Config.CacheDuration;
         }
+        public override void Process()
+        {
+            base.Process();
+
+            bool focused = CEnvir.Target.ActiveControl == TextBox && !ReadOnly;
+            if (focused)
+            {
+                if ((CEnvir.Now - _caretToggle).TotalMilliseconds >= 530)
+                {
+                    _caretToggle = CEnvir.Now;
+                    _caretVisible = !_caretVisible;
+                    TextureValid = false;
+                }
+            }
+            else if (_caretVisible)
+            {
+                _caretVisible = false;
+                TextureValid = false;
+            }
+        }
+
         public override void DisposeTexture()
         {
             if (_textBoxTextureHandle.IsValid)
