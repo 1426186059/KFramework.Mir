@@ -19,7 +19,8 @@ namespace Coroutines
         private readonly List<Coroutine> _pending = new List<Coroutine>();
 
         /// <summary>启动一个协程，返回其句柄（等价于 Unity 的 MonoBehaviour.StartCoroutine）。
-        /// 句柄可用于 yield return（链式等待）或 StopCoroutine。</summary>
+        /// 句柄可用于 yield return（链式等待）或 StopCoroutine。
+        /// 也可直接 yield return 一个返回 IEnumerator 的方法（如 Session.Initialize），自动作为嵌套协程运行。</summary>
         public Coroutine StartCoroutine(IEnumerator routine)
         {
             var c = new Coroutine(routine);
@@ -71,8 +72,20 @@ namespace Coroutines
                 if (c.IsDone) { _active.RemoveAt(i); continue; }
                 if (c.IsReady(now))
                 {
-                    if (!c.Advance(now) || c.IsDone)
-                        _active.RemoveAt(i);
+                    try
+                    {
+                        bool spawned;
+                        Coroutine nested = c.Advance(now, out spawned);
+                        if (spawned && nested != null)
+                            _pending.Add(nested); // 下一帧提升为活跃并推进（与 Unity 嵌套协程下一帧起步一致）
+                    }
+                    catch (Exception ex)
+                    {
+                        // 对齐 Unity：协程内抛异常会被捕获并记录，不会中断整个玩家循环。
+                        Console.WriteLine($"[Coroutine] 协程执行异常: {ex}");
+                        c.IsDone = true;
+                    }
+                    if (c.IsDone) _active.RemoveAt(i);
                 }
             }
         }
