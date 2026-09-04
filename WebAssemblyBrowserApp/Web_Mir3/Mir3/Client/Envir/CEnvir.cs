@@ -5,12 +5,14 @@ using Shared.Rendering;
 using Client.Scenes;
 using Client.Scenes.Views;
 using Client.UserModels;
+using Coroutines;
 using Library;
 using Library.Network;
 using Library.SystemModels;
 using MirDB;
 using Sentry;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -413,90 +415,101 @@ namespace Client.Envir
             BlockList = new List<ClientBlockInfo>();
         }
 
-        public static void LoadDatabase()
+        /// <summary>
+        /// 数据库加载协程（对齐 Unity 移植版：public static IEnumerator LoadDatabase()）。
+        /// 由 LoginScene.LoadDatabase() 经 CoroutineManager.Instance.StartCoroutine 启动，立即返回。
+        /// 内部直接 yield return Session.Initialize(...)——把返回 IEnumerator 的方法当作嵌套协程逐表
+        /// （每帧一张表）跑完再继续，主线程不冻结、心跳照常。Unity 移植版即此写法。
+        /// 全部加载完成后置 Loaded=true（LoginScene 每帧轮询此标志）。
+        /// 注意：C# 不允许在含 catch 的 try 内 yield，故所有 yield 都放在 try 之外（与 Unity 移植版一致）。
+        /// </summary>
+        public static System.Collections.IEnumerator LoadDatabase()
         {
-            Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: start (DatabaseLoadAttempted=true)");
+            yield return null;
             DatabaseLoadAttempted = true;
             Loaded = false;
             ClientSystemDatabaseVersion = null;
             ClientSystemDatabaseExists = false;
-
             Loading = true;
-            Task.Run(() =>
+
+            Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: creating MirDB.Session");
+            Session = new MirDB.Session(SessionMode.Users, @".\Data\") { BackUp = false };
+
+            // Unity 移植版写法：直接 yield return 返回 IEnumerator 的 Initialize，
+            // 调度器会把它当作嵌套协程，逐表（每帧一张表）跑完再继续。
+            yield return Session.Initialize(
+                Assembly.GetAssembly(typeof(ItemInfo)),
+                Assembly.GetAssembly(typeof(WindowSetting))
+            );
+
+            ClientSystemDatabaseVersion = Session.SystemDatabaseVersion;
+            ClientSystemDatabaseExists = Session.SystemDatabaseExists;
+
+            Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: SystemDatabaseVersion='{ClientSystemDatabaseVersion}' Exists={ClientSystemDatabaseExists}");
+
+            if (!ClientSystemDatabaseExists)
             {
-                try
+                Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: Exists=false -> Loaded stays false!");
+                Loading = false;
+                yield break;
+            }
+
+            try
+            {
+                Globals.ItemInfoList = Session.GetCollection<ItemInfo>();
+                Globals.MagicInfoList = Session.GetCollection<MagicInfo>();
+                Globals.MapInfoList = Session.GetCollection<MapInfo>();
+                Globals.CurrencyInfoList = Session.GetCollection<CurrencyInfo>();
+                Globals.InstanceInfoList = Session.GetCollection<InstanceInfo>();
+                Globals.NPCPageList = Session.GetCollection<NPCPage>();
+                Globals.MonsterInfoList = Session.GetCollection<MonsterInfo>();
+                Globals.FishingInfoList = Session.GetCollection<FishingInfo>();
+                Globals.StoreInfoList = Session.GetCollection<StoreInfo>();
+                Globals.NPCInfoList = Session.GetCollection<NPCInfo>();
+                Globals.MovementInfoList = Session.GetCollection<MovementInfo>();
+                Globals.QuestInfoList = Session.GetCollection<QuestInfo>();
+                Globals.QuestTaskList = Session.GetCollection<QuestTask>();
+                Globals.CompanionInfoList = Session.GetCollection<CompanionInfo>();
+                Globals.CompanionLevelInfoList = Session.GetCollection<CompanionLevelInfo>();
+                Globals.DisciplineInfoList = Session.GetCollection<DisciplineInfo>();
+                Globals.FameInfoList = Session.GetCollection<FameInfo>();
+                Globals.BundleInfoList = Session.GetCollection<BundleInfo>();
+                Globals.LootBoxInfoList = Session.GetCollection<LootBoxInfo>();
+                Globals.HelpInfoList = Session.GetCollection<HelpInfo>();
+                Globals.MilestoneInfoList = Session.GetCollection<MilestoneInfo>();
+                Globals.MilestoneTaskInfoList = Session.GetCollection<MilestoneInfoTask>();
+
+                KeyBinds = Session.GetCollection<KeyBindInfo>();
+                WindowSettings = Session.GetCollection<WindowSetting>();
+                CastleInfoList = Session.GetCollection<CastleInfo>();
+
+                Globals.GoldInfo = Globals.CurrencyInfoList.Binding.First(x => x.Type == CurrencyType.Gold).DropItem;
+
+                CheckKeyBinds();
+
+                IReadOnlyList<Size> supportedResolutions = RenderingPipelineManager.GetSupportedResolutions();
+
+                if (supportedResolutions.Count > 0)
                 {
-                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: creating MirDB.Session(path=@'.\\Data\\')");
-                    Session = new MirDB.Session(SessionMode.Users, @".\Data\") { BackUp = false };
-
-                    Session.Initialize(
-                        Assembly.GetAssembly(typeof(ItemInfo)),
-                        Assembly.GetAssembly(typeof(WindowSetting))
-                    );
-
-                    ClientSystemDatabaseVersion = Session.SystemDatabaseVersion;
-                    ClientSystemDatabaseExists = Session.SystemDatabaseExists;
-                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: SystemDatabaseVersion='{ClientSystemDatabaseVersion}' Exists={ClientSystemDatabaseExists}");
-
-                    if (!ClientSystemDatabaseExists) { Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: Exists=false -> early return, Loaded stays false!"); return; }
-
-                    Globals.ItemInfoList = Session.GetCollection<ItemInfo>();
-                    Globals.MagicInfoList = Session.GetCollection<MagicInfo>();
-                    Globals.MapInfoList = Session.GetCollection<MapInfo>();
-                    Globals.CurrencyInfoList = Session.GetCollection<CurrencyInfo>();
-                    Globals.InstanceInfoList = Session.GetCollection<InstanceInfo>();
-                    Globals.NPCPageList = Session.GetCollection<NPCPage>();
-                    Globals.MonsterInfoList = Session.GetCollection<MonsterInfo>();
-                    Globals.FishingInfoList = Session.GetCollection<FishingInfo>();
-                    Globals.StoreInfoList = Session.GetCollection<StoreInfo>();
-                    Globals.NPCInfoList = Session.GetCollection<NPCInfo>();
-                    Globals.MovementInfoList = Session.GetCollection<MovementInfo>();
-                    Globals.QuestInfoList = Session.GetCollection<QuestInfo>();
-                    Globals.QuestTaskList = Session.GetCollection<QuestTask>();
-                    Globals.CompanionInfoList = Session.GetCollection<CompanionInfo>();
-                    Globals.CompanionLevelInfoList = Session.GetCollection<CompanionLevelInfo>();
-                    Globals.DisciplineInfoList = Session.GetCollection<DisciplineInfo>();
-                    Globals.FameInfoList = Session.GetCollection<FameInfo>();
-                    Globals.BundleInfoList = Session.GetCollection<BundleInfo>();
-                    Globals.LootBoxInfoList = Session.GetCollection<LootBoxInfo>();
-                    Globals.HelpInfoList = Session.GetCollection<HelpInfo>();
-                    Globals.MilestoneInfoList = Session.GetCollection<MilestoneInfo>();
-                    Globals.MilestoneTaskInfoList = Session.GetCollection<MilestoneInfoTask>();
-
-                    KeyBinds = Session.GetCollection<KeyBindInfo>();
-                    WindowSettings = Session.GetCollection<WindowSetting>();
-                    CastleInfoList = Session.GetCollection<CastleInfo>();
-
-                    Globals.GoldInfo = Globals.CurrencyInfoList.Binding.First(x => x.Type == CurrencyType.Gold).DropItem;
-
-                    CheckKeyBinds();
-
-                    IReadOnlyList<Size> supportedResolutions = RenderingPipelineManager.GetSupportedResolutions();
-
-                    if (supportedResolutions.Count > 0)
-                    {
-                        if (!supportedResolutions.Contains(Config.GameSize))
-                            Config.GameSize = supportedResolutions[0];
-                    }
-                    else
-                    {
-                        // Handle the case where no valid resolutions are found.
-                        // For example, set a default resolution.
-                        Config.GameSize = new Size(1024, 768);  // Default resolution
-                    }
-
-                    Loaded = true;
-                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
+                    if (!supportedResolutions.Contains(Config.GameSize))
+                        Config.GameSize = supportedResolutions[0];
                 }
-                catch (Exception ex)
+                else
                 {
-                    Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase EXCEPTION: {ex}");
+                    // Handle the case where no valid resolutions are found.
+                    // For example, set a default resolution.
+                    Config.GameSize = new Size(1024, 768);  // Default resolution
                 }
-                finally
-                {
-                    Loading = false;
-                }
-            });
+
+                Loading = false;
+                Loaded = true;
+                Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase EXCEPTION(post): {ex}");
+                Loading = false;
+            }
         }
 
         public static IEnumerable<KeyBindAction> GetKeyAction(Keys key)

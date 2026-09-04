@@ -87,7 +87,30 @@ namespace MirDB
             Mode = mode;
         }
 
-        public void Initialize(params Assembly[] assemblies)
+        /// <summary>
+        /// 同步初始化（桌面端原路径）：直接把逐表加载跑完。等价于逐项驱动 InitializeIncremental 到结束，
+        /// 行为与旧版一致（单线程顺序加载）。
+        /// </summary>
+        /// <summary>
+        /// 初始化（协程版，对齐 Unity 移植版）：返回 IEnumerator，每次 MoveNext 加载一张表。
+        /// 调用方（协程）可在两次 MoveNext 之间让出主线程（每帧一张表），
+        /// 避免单线程 WASM 一次性解析全部 DB 表冻结主线程导致心跳超时。
+        /// 桌面端需要同步完成时，直接用 foreach 消费本枚举器即可。
+        /// </summary>
+        public System.Collections.IEnumerator Initialize(params Assembly[] assemblies)
+        {
+            foreach (ADBCollection collection in InitializeIncremental(assemblies))
+                yield return collection;
+        }
+
+        /// <summary>
+        /// 增量初始化：返回每张已加载表的枚举器，调用方可在两次 MoveNext 之间让出（如每帧加载若干张表），
+        /// 避免单线程环境（浏览器 WASM）一次性解析全部 DB 表冻结主线程导致心跳超时。
+        /// 桌面端 Initialize 通过一次性消费本枚举器保持原行为。
+        /// 注意：旧版的 Task.Run + Task.WaitAll 并行加载已移除——单线程 WASM 下并行只是把工作塞进同一帧，
+        /// 反而造成长冻结；顺序逐表 + 协程分帧才是正确做法。
+        /// </summary>
+        public IEnumerable<ADBCollection> InitializeIncremental(params Assembly[] assemblies)
         {
             Assemblies = assemblies;
 
@@ -113,10 +136,12 @@ namespace MirDB
                 Collections[type] = (ADBCollection)Activator.CreateInstance(collectionType.MakeGenericType(type), this);
             }
 
-            InitializeSystem();
+            foreach (ADBCollection c in InitializeSystemIncremental())
+                yield return c;
 
             if ((Mode & SessionMode.Users) == SessionMode.Users)
-                InitializeUsers();
+                foreach (ADBCollection c in InitializeUsersIncremental())
+                    yield return c;
 
             Parallel.ForEach(Relationships, x => x.Value.ConsumeKeys(this));
 
@@ -154,7 +179,7 @@ namespace MirDB
             return ms.ToArray();
         }
 
-        private void InitializeSystem()
+        private IEnumerable<ADBCollection> InitializeSystemIncremental()
         {
             List<DBMapping> mappings = new List<DBMapping>();
             if ((Mode & SessionMode.System) == SessionMode.System)
@@ -182,7 +207,7 @@ namespace MirDB
             byte[] systemBytes = LoadFileBytes(SystemPath, out bool systemExists);
             SystemDatabaseExists = systemExists;
 
-            if (!SystemDatabaseExists) return;
+            if (!SystemDatabaseExists) yield break;
 
             using (BinaryReader reader = Library.Encryption.GetReader(new MemoryStream(systemBytes)))
             {
@@ -191,7 +216,6 @@ namespace MirDB
                 for (int i = 0; i < count; i++)
                     mappings.Add(new DBMapping(Assemblies, reader));
 
-                List<Task> loadingTasks = new List<Task>();
                 foreach (DBMapping mapping in mappings)
                 {
                     byte[] data = reader.ReadBytes(reader.ReadInt32());
@@ -199,11 +223,9 @@ namespace MirDB
                     ADBCollection value;
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
-                    loadingTasks.Add(Task.Run(() => value.Load(data, mapping)));
+                    value.Load(data, mapping);
+                    yield return value; // 让出：调用方（协程）可在此切回主循环
                 }
-
-                if (loadingTasks.Count > 0)
-                    Task.WaitAll(loadingTasks.ToArray());
             }
 
             SystemDatabaseVersion = GetSystemDatabaseInfo()?.Version;
@@ -214,7 +236,7 @@ namespace MirDB
                 SystemVersionPending = true;
             }
         }
-        private void InitializeUsers()
+        private IEnumerable<ADBCollection> InitializeUsersIncremental()
         {
             List<DBMapping> mappings = new List<DBMapping>();
 
@@ -237,7 +259,7 @@ namespace MirDB
             mappings.Clear();
 
             byte[] usersBytes = LoadFileBytes(UsersPath, out bool usersExists);
-            if (!usersExists) return;
+            if (!usersExists) yield break;
 
             using (BinaryReader reader = Library.Encryption.GetReader(new MemoryStream(usersBytes)))
             {
@@ -246,7 +268,6 @@ namespace MirDB
                 for (int i = 0; i < count; i++)
                     mappings.Add(new DBMapping(Assemblies, reader));
 
-                List<Task> loadingTasks = new List<Task>();
                 foreach (DBMapping mapping in mappings)
                 {
                     byte[] data = reader.ReadBytes(reader.ReadInt32());
@@ -254,11 +275,9 @@ namespace MirDB
                     ADBCollection value;
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
-                    loadingTasks.Add(Task.Run(() => value.Load(data, mapping)));
+                    value.Load(data, mapping);
+                    yield return value; // 让出：调用方（协程）可在此切回主循环
                 }
-
-                if (loadingTasks.Count > 0)
-                    Task.WaitAll(loadingTasks.ToArray());
             }
         }
 
@@ -550,7 +569,9 @@ namespace MirDB
             try
             {
                 Session session = new Session(SessionMode.None, Root, BackupRoot) { BackUp = false };
-                session.Initialize(Assemblies);
+                // Initialize 返回 IEnumerator（供协程嵌套），同步消费需手动 MoveNext 驱动到结束。
+                System.Collections.IEnumerator initEnum = session.Initialize(Assemblies);
+                while (initEnum.MoveNext()) { }
 
                 return session.GetSystemDatabaseInfo()?.Version;
             }

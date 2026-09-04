@@ -10,6 +10,7 @@ using Client.Controls;
 using Client.Envir;
 using Client.Scenes;
 using Client.Scenes.Views;
+using Coroutines;
 using Library;
 using MirDB;
 using Shared.Envir;
@@ -166,6 +167,7 @@ public static partial class MirClientHost
     public static void Frame(double timeMs)
     {
         if (!_ready) return;
+        CoroutineManager.Instance.Update(); // 每帧先推进协程（Unity 风格：每帧每协程只前进一个 yield 边界，分帧加载 DB 等），保证心跳不被冻结
         CEnvir.GameLoop();
     }
 

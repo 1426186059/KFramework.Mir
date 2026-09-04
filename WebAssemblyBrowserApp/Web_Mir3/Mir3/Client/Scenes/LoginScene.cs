@@ -10,6 +10,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Client.Network;
 using Library.Network;
+using Coroutines;
 using C = Library.Network.ClientPackets;
 
 //Cleaned
@@ -406,8 +407,8 @@ namespace Client.Scenes
 
         public void LoadDatabase()
         {
-            Console.WriteLine($"[WS-DIAG] LoginScene.LoadDatabase -> CEnvir.LoadDatabase()");
-            CEnvir.LoadDatabase();
+            Console.WriteLine($"[WS-DIAG] LoginScene.LoadDatabase -> CoroutineManager.StartCoroutine(CEnvir.LoadDatabase())");
+            CoroutineManager.Instance.StartCoroutine(CEnvir.LoadDatabase());
         }
 
         private void UpdateSystemDatabaseVersionLabel()
