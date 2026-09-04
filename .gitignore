@@ -1,0 +1,11 @@
+# 大体量游戏资源不入库（从传奇3客户端按需拷贝）
+WebAssemblyBrowserApp/wwwroot/data/*.Zl
+WebAssemblyBrowserApp/wwwroot/data/*.zl
+
+# .NET
+bin/
+obj/
+*.user
+*ai/
+
+/.playwright-cli/
