@@ -13,6 +13,38 @@ export const crCreateOffscreen = (w, h) => {
 
 export const crSetTarget = (id) => { gfx.cur = id === 0 ? gfx.mainTarget : gfx.offscreens.get(id); };
 
+// 把 Zircon 的 BlendMode 映射到 Canvas2D 的 globalCompositeOperation。
+// 语义取自 D3D9/D3D11 混合状态（Result = SrcBlend*Src + DstBlend*Dst）：
+//   LIGHTMAP(12): Zero*Src + SrcColor*Dst      -> multiply（光图乘到场景，经典暗场光照）
+//   COLORFY(8) : SourceAlpha*Src + Dst         -> lighter（灯光精灵累加到光层）
+//   HIGHLIGHT(10): BlendFactor*Src + Dst       -> lighter（alpha 乘 rate）
+//   LIGHT/LIGHTINV/NORMAL(默认分支): InvDestColor*Src + Dst -> screen
+//   NONE(-1) / Blending=false                  -> source-over（标准 alpha）
+export const crSetBlend = (mode, rate, enabled) => {
+    gfx.blendRate = rate;
+    if (!enabled) { gfx.blendOp = 'source-over'; return; }
+    switch (mode) {
+        case 12: gfx.blendOp = 'multiply'; break;   // LIGHTMAP
+        case 8:  gfx.blendOp = 'lighter';  break;   // COLORFY
+        case 10: gfx.blendOp = 'lighter';  break;   // HIGHLIGHT
+        case 1:  // LIGHT
+        case 2:  // LIGHTINV
+        case 0:  // NORMAL（Blending=true 时 DX 走 screen）
+        case 3:  // INVNORMAL
+        case 5:  // INVLIGHTINV
+        case 6:  // INVCOLOR
+        case 7:  // INVBACKGROUND
+            gfx.blendOp = 'screen'; break;
+        case 4:  // INVLIGHT
+        case 9:  // MASK
+        case 11: // EFFECTMASK
+            gfx.blendOp = 'lighter'; break;
+        case -1: // NONE
+        default:
+            gfx.blendOp = 'source-over'; break;
+    }
+};
+
 export const crClear = (r, g, b, a) => {
     if (gfx.cur === gfx.mainTarget) console.log(`[crClear] MAIN a=${a} r=${r} g=${g} b=${b}`);
     gfx.cur.ctx.clearRect(0, 0, gfx.cur.canvas.width, gfx.cur.canvas.height);
@@ -31,9 +63,15 @@ export const crDraw = (tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb) => {
         console.log(`[crDraw] tex=${tex} sw=${sw} sh=${sh} dx=${dx|0} dy=${dy|0} dw=${dw|0} dh=${dh|0} a=${((colorArgb >>> 24) & 0xFF)} found=${found} main=${main}`);
     }
     if (!src || sw <= 0 || sh <= 0) return;
-    gfx.cur.ctx.globalAlpha = ((colorArgb >>> 24) & 0xFF) / 255;
-    gfx.cur.ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
-    gfx.cur.ctx.globalAlpha = 1;
+    const ctx = gfx.cur.ctx;
+    ctx.globalCompositeOperation = gfx.blendOp;
+    let a = ((colorArgb >>> 24) & 0xFF) / 255;
+    // HIGHLIGHT: 结果 = BlendFactor*Src + Dst，用 alpha 承载 rate
+    if (gfx.blendOp === 'lighter' && gfx.blendRate !== 1) a *= gfx.blendRate;
+    ctx.globalAlpha = a;
+    ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
     if (tex === 1 && main === 1 && !gfx._bgpx) {
         gfx._bgpx = true;
         try {

@@ -19,6 +19,9 @@ internal static partial class BrowserCanvas
     [JSImport("mir.crSetTarget", "main.js")]
     private static partial void SetTargetImpl(int id);
 
+    [JSImport("mir.crSetBlend", "main.js")]
+    private static partial void SetBlendImpl(int mode, float rate, bool enabled);
+
     [JSImport("mir.crClear", "main.js")]
     private static partial void ClearImpl(int r, int g, int b, int a);
 
@@ -49,6 +52,7 @@ internal static partial class BrowserCanvas
     public static void UploadImage(int id, byte[] rgba, int w, int h) => UploadImageImpl(id, rgba, w, h);
     public static void DisposeImage(int id) => DisposeImageImpl(id);
     public static void SetTarget(int id) => SetTargetImpl(id);
+    public static void SetBlendState(int mode, float rate, bool enabled) => SetBlendImpl(mode, rate, enabled);
     public static void Clear(int r, int g, int b, int a) => ClearImpl(r, g, b, a);
     public static void Clear(Color c) => ClearImpl(c.R, c.G, c.B, c.A);
     public static void DrawImage(int tex, int sx, int sy, int sw, int sh, float dx, float dy, float dw, float dh, int colorArgb)

@@ -16,6 +16,8 @@ export const gfx = {
     nextOffId: 1000,
     mainTarget: { canvas: dom.canvas, ctx: dom.ctx },
     cur: null,                      // 当前绘制目标
+    blendOp: 'source-over',         // 当前 globalCompositeOperation（由 SetBlend 推送）
+    blendRate: 1,                   // 当前混合速率（HIGHLIGHT 等用于缩放 alpha）
 };
 gfx.cur = gfx.mainTarget;
 

@@ -119,6 +119,7 @@ namespace Shared.Rendering
             _blending = enabled;
             _blendRate = rate;
             _blendMode = mode;
+            BrowserCanvas.SetBlendState((int)mode, rate, enabled);
         }
         public bool IsBlending() => _blending;
         public float GetBlendRate() => _blendRate;
