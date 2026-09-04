@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Numerics;
 using System.Runtime.InteropServices.JavaScript;
 
 namespace MirEngine;
@@ -57,6 +58,16 @@ internal static partial class BrowserCanvas
     public static void Clear(Color c) => ClearImpl(c.R, c.G, c.B, c.A);
     public static void DrawImage(int tex, int sx, int sy, int sw, int sh, float dx, float dy, float dw, float dh, int colorArgb)
         => DrawImpl(tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb);
+
+    /// <summary>矩阵变换绘制：把源矩形当作基础几何 (0,0,sw,sh)，经 2D 仿射矩阵变换后绘制。
+    /// 对应 canvas-engine.js 的 mir.crDrawTransform，语义对齐原版 DrawTexture 的 transform/center/translation 契约。</summary>
+    [JSImport("mir.crDrawTransform", "main.js")]
+    private static partial void DrawTransformImpl(int tex, int sx, int sy, int sw, int sh,
+        float m11, float m12, float m21, float m22, float m31, float m32, int colorArgb);
+
+    public static void DrawImageTransform(int tex, int sx, int sy, int sw, int sh, Matrix3x2 transform, int colorArgb)
+        => DrawTransformImpl(tex, sx, sy, sw, sh,
+            transform.M11, transform.M12, transform.M21, transform.M22, transform.M31, transform.M32, colorArgb);
     public static void FillRect(int x, int y, int w, int h, int colorArgb) => FillRectImpl(x, y, w, h, colorArgb);
     public static void DrawLine(float x1, float y1, float x2, float y2, float w, int colorArgb) => DrawLineImpl(x1, y1, x2, y2, w, colorArgb);
     public static void Flush() => FlushImpl();

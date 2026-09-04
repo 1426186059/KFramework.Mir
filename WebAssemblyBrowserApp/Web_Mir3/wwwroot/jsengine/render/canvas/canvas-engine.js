@@ -75,6 +75,25 @@ export const crDraw = (tex, sx, sy, sw, sh, dx, dy, dw, dh, colorArgb) => {
     ctx.globalCompositeOperation = 'source-over';
 };
 
+// 矩阵变换绘制：把源矩形 (sx,sy,sw,sh) 当作基础几何 (0,0,sw,sh)，经 2D 仿射矩阵
+// (m11,m12,m21,m22,m31,m32) 变换后再绘制。语义对齐原版 D3D9/D3D11 的 DrawTexture：
+//   finalTransform = translate(-center) * transform;  finalTransform.M31 += translation.X ...
+// 用 transform（乘法）而非 setTransform，以保留绘制表面当前的基变换（如 dpr 缩放）。
+export const crDrawTransform = (tex, sx, sy, sw, sh, m11, m12, m21, m22, m31, m32, colorArgb) => {
+    const src = gfx.textures.get(tex) || gfx.offscreens.get(tex)?.canvas;
+    if (!src) { console.warn(`[crDrawTransform] 纹理缺失 tex=${tex}`); return; }
+    if (sw <= 0 || sh <= 0) return;
+    const ctx = gfx.cur.ctx;
+    ctx.save();
+    ctx.globalCompositeOperation = gfx.blendOp;
+    let a = ((colorArgb >>> 24) & 0xFF) / 255;
+    if (gfx.blendOp === 'lighter' && gfx.blendRate !== 1) a *= gfx.blendRate;
+    ctx.globalAlpha = a;
+    ctx.transform(m11, m12, m21, m22, m31, m32);
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+    ctx.restore();
+};
+
 export const crMeasureText = (text, fontCss, maxWidth) => {
     dom.ctx.font = fontCss;
     const m = dom.ctx.measureText(text);

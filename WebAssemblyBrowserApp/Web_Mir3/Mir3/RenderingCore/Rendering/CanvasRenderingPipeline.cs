@@ -151,7 +151,19 @@ namespace Shared.Rendering
             if (!texture.IsValid) return;
             int id = (int)texture.NativeHandle;
             Rectangle src = sourceRectangle ?? new Rectangle(0, 0, _backBufferSize.Width, _backBufferSize.Height);
-            BrowserCanvas.DrawImage(id, src.X, src.Y, src.Width, src.Height, translation.X, translation.Y, src.Width, src.Height, colour.ToArgb());
+
+            // 复刻原版（D3D9/D3D11）DrawTexture 的变换契约：
+            // 把"基础几何 (0,0,srcW,srcH)" 经 finalTransform 变换后绘制。
+            //   finalTransform = translate(-center) * transform;   // center 作为缩放/旋转中心
+            //   finalTransform.M31 += translation.X;               // 平移叠加到矩阵
+            //   finalTransform.M32 += translation.Y;
+            Matrix3x2 finalTransform = transform;
+            if (center.X != 0 || center.Y != 0)
+                finalTransform = Matrix3x2.CreateTranslation(-center.X, -center.Y) * finalTransform;
+            finalTransform.M31 += translation.X;
+            finalTransform.M32 += translation.Y;
+
+            BrowserCanvas.DrawImageTransform(id, src.X, src.Y, src.Width, src.Height, finalTransform, colour.ToArgb());
         }
 
         public void BeginSpriteBatch() { }
