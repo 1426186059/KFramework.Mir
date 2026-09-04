@@ -90,7 +90,7 @@ public static partial class MirClientHost
                 if (idx >= 0) name = name.Substring(idx + 1);
                 if (string.IsNullOrEmpty(name)) name = "System.db";
                 var url = "MyRes/Data/" + name;
-                System.Console.WriteLine("[DB-LOADER] path='" + path + "' -> url='" + url + "'");
+                PrintTool.Write("DB-LOADER", $"path='{path}' -> url='{url}'");
                 return MirEngine.BrowserResource.GetBytes(url);
             };
             CEnvir.SaveChatLogLine = text => MirEngine.BrowserStorage.AppendText("mir_chat_log", text);

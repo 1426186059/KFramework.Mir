@@ -507,7 +507,7 @@ namespace Client.Envir
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DB] CEnvir.LoadDatabase EXCEPTION(post): {ex}");
+                PrintTool.Write("DB", $"CEnvir.LoadDatabase EXCEPTION(post): {ex}");
                 Loading = false;
             }
         }

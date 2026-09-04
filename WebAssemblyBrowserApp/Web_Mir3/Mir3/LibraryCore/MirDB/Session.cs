@@ -138,7 +138,7 @@ namespace MirDB
                 Collections[type] = (ADBCollection)Activator.CreateInstance(collectionType.MakeGenericType(type), this);
             }
 
-            Console.WriteLine($"[DB] InitializeIncremental: 发现 {Collections.Count} 张表, 来自 {assemblies.Length} 个程序集");
+            PrintTool.Write("DB", $"InitializeIncremental: 发现 {Collections.Count} 张表, 来自 {assemblies.Length} 个程序集");
 
             foreach (ADBCollection c in InitializeSystemIncremental())
                 yield return c;
@@ -161,7 +161,7 @@ namespace MirDB
                 Save(true);
 
             dbSw.Stop();
-            Console.WriteLine($"[DB] InitializeIncremental 完成: 共 {Collections.Count} 张表, 耗时 {dbSw.ElapsedMilliseconds}ms");
+            PrintTool.Write("DB", $"InitializeIncremental 完成: 共 {Collections.Count} 张表, 耗时 {dbSw.ElapsedMilliseconds}ms");
         }
 
         /// <summary>
@@ -232,7 +232,7 @@ namespace MirDB
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
                     value.Load(data, mapping);
-                    Console.WriteLine($"[DB] 加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
+                    PrintTool.Write("DB", $"加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
                     yield return value; // 让出：调用方（协程）可在此切回主循环
                 }
             }
@@ -286,7 +286,7 @@ namespace MirDB
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
                     value.Load(data, mapping);
-                    Console.WriteLine($"[DB] 加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
+                    PrintTool.Write("DB", $"加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
                     yield return value; // 让出：调用方（协程）可在此切回主循环
                 }
             }
