@@ -89,33 +89,15 @@ namespace MirDB
         }
 
         /// <summary>
-        /// 同步初始化（桌面端原路径）：直接把逐表加载跑完。等价于逐项驱动 InitializeIncremental 到结束，
-        /// 行为与旧版一致（单线程顺序加载）。
-        /// </summary>
-        /// <summary>
-        /// 初始化（协程版，对齐 Unity 移植版）：返回 IEnumerator，每次 MoveNext 加载一张表。
-        /// 调用方（协程）可在两次 MoveNext 之间让出主线程（每帧一张表），
+        /// 初始化（对齐 Unity 移植版）：返回 IEnumerator，由协程调度器当作嵌套协程逐表推进。
+        /// 内部 yield return InitializeSystem() / InitializeUsers()（均为 IEnumerator），
+        /// 每个 DB 表 yield return null（等价于 Unity 的「等一帧」），把 81 张表分摊到多帧，
         /// 避免单线程 WASM 一次性解析全部 DB 表冻结主线程导致心跳超时。
-        /// 桌面端需要同步完成时，直接用 foreach 消费本枚举器即可。
+        /// 所有表加载完成后，统一执行 ConsumeKeys / OnLoaded（与 Unity 移植版一致）。
         /// </summary>
         public System.Collections.IEnumerator Initialize(params Assembly[] assemblies)
         {
-            foreach (ADBCollection collection in InitializeIncremental(assemblies))
-                yield return collection;
-        }
-
-        /// <summary>
-        /// 增量初始化：返回每张已加载表的枚举器，调用方可在两次 MoveNext 之间让出（如每帧加载若干张表），
-        /// 避免单线程环境（浏览器 WASM）一次性解析全部 DB 表冻结主线程导致心跳超时。
-        /// 桌面端 Initialize 通过一次性消费本枚举器保持原行为。
-        /// 注意：旧版的 Task.Run + Task.WaitAll 并行加载已移除——单线程 WASM 下并行只是把工作塞进同一帧，
-        /// 反而造成长冻结；顺序逐表 + 协程分帧才是正确做法。
-        /// </summary>
-        public IEnumerable<ADBCollection> InitializeIncremental(params Assembly[] assemblies)
-        {
             Assemblies = assemblies;
-            Stopwatch dbSw = Stopwatch.StartNew();
-            Stopwatch phaseSw = new Stopwatch();
 
             if (DatabaseBytesLoader == null)
             {
@@ -139,22 +121,17 @@ namespace MirDB
                 Collections[type] = (ADBCollection)Activator.CreateInstance(collectionType.MakeGenericType(type), this);
             }
 
-            PrintTool.Write("DB", $"InitializeIncremental: 发现 {Collections.Count} 张表, 来自 {assemblies.Length} 个程序集");
+            PrintTool.Write("DB", $"Initialize: 发现 {Collections.Count} 张表, 来自 {assemblies.Length} 个程序集");
 
-            phaseSw.Restart();
-            foreach (ADBCollection c in InitializeSystemIncremental())
-                yield return c;
-            PrintTool.Write("DB", $"阶段[系统表加载] 耗时 {phaseSw.ElapsedMilliseconds}ms");
+            Stopwatch dbSw = Stopwatch.StartNew();
 
-            phaseSw.Restart();
+            yield return InitializeSystem();
             if ((Mode & SessionMode.Users) == SessionMode.Users)
-                foreach (ADBCollection c in InitializeUsersIncremental())
-                    yield return c;
-            PrintTool.Write("DB", $"阶段[用户表加载] 耗时 {phaseSw.ElapsedMilliseconds}ms");
+                yield return InitializeUsers();
 
-            phaseSw.Restart();
-            foreach (KeyValuePair<Type, DBRelationship> rel in Relationships)
-                rel.Value.ConsumeKeys(this);
+            Stopwatch phaseSw = Stopwatch.StartNew();
+            foreach (KeyValuePair<Type, DBRelationship> v in Relationships)
+                v.Value.ConsumeKeys(this);
             PrintTool.Write("DB", $"阶段[ConsumeKeys] 耗时 {phaseSw.ElapsedMilliseconds}ms");
 
             Relationships = null;
@@ -171,32 +148,14 @@ namespace MirDB
                 Save(true);
 
             dbSw.Stop();
-            PrintTool.Write("DB", $"InitializeIncremental 完成: 共 {Collections.Count} 张表, 耗时 {dbSw.ElapsedMilliseconds}ms");
+            PrintTool.Write("DB", $"Initialize 完成: 共 {Collections.Count} 张表, 耗时 {dbSw.ElapsedMilliseconds}ms");
         }
 
         /// <summary>
-        /// 读取数据库文件全部字节。浏览器（DatabaseBytesLoader 已设置）经 HTTP 取；否则走 System.IO.File。
-        /// 返回值与 exists 语义一致：不存在时返回 null 且 exists=false。
+        /// 系统表加载（对齐 Unity 移植版）：返回 IEnumerator，每个表 yield return null 分摊到一帧。
+        /// 浏览器环境经 DatabaseBytesLoader（LoadFileBytes）取字节；桌面端走 System.IO.File。
         /// </summary>
-        private byte[] LoadFileBytes(string path, out bool exists)
-        {
-            if (DatabaseBytesLoader != null)
-            {
-                byte[] data = DatabaseBytesLoader(path);
-                exists = data != null && data.Length > 0;
-                return data;
-            }
-
-            exists = File.Exists(path);
-            if (!exists) return null;
-
-            using FileStream fs = File.OpenRead(path);
-            using MemoryStream ms = new MemoryStream();
-            fs.CopyTo(ms);
-            return ms.ToArray();
-        }
-
-        private IEnumerable<ADBCollection> InitializeSystemIncremental()
+        private System.Collections.IEnumerator InitializeSystem()
         {
             List<DBMapping> mappings = new List<DBMapping>();
             if ((Mode & SessionMode.System) == SessionMode.System)
@@ -226,6 +185,7 @@ namespace MirDB
 
             if (!SystemDatabaseExists) yield break;
 
+            Stopwatch sw = Stopwatch.StartNew();
             using (BinaryReader reader = Library.Encryption.GetReader(new MemoryStream(systemBytes)))
             {
                 int count = reader.ReadInt32();
@@ -242,10 +202,11 @@ namespace MirDB
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
                     value.Load(data, mapping);
-                    PrintTool.Write("DB", $"加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
-                    yield return value; // 让出：调用方（协程）可在此切回主循环
+                    PrintTool.Write("DB", $"加载完成 (系统 {++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
+                    yield return null; // 让出：等价于 Unity 的「等一帧」，下一帧再加载下一张表
                 }
             }
+            PrintTool.Write("DB", $"阶段[系统表加载] 耗时 {sw.ElapsedMilliseconds}ms");
 
             SystemDatabaseVersion = GetSystemDatabaseInfo()?.Version;
 
@@ -255,7 +216,11 @@ namespace MirDB
                 SystemVersionPending = true;
             }
         }
-        private IEnumerable<ADBCollection> InitializeUsersIncremental()
+
+        /// <summary>
+        /// 用户表加载（对齐 Unity 移植版）：返回 IEnumerator，每个表 yield return null 分摊到一帧。
+        /// </summary>
+        private System.Collections.IEnumerator InitializeUsers()
         {
             List<DBMapping> mappings = new List<DBMapping>();
 
@@ -280,6 +245,7 @@ namespace MirDB
             byte[] usersBytes = LoadFileBytes(UsersPath, out bool usersExists);
             if (!usersExists) yield break;
 
+            Stopwatch sw = Stopwatch.StartNew();
             using (BinaryReader reader = Library.Encryption.GetReader(new MemoryStream(usersBytes)))
             {
                 int count = reader.ReadInt32();
@@ -296,10 +262,33 @@ namespace MirDB
                     if (mapping.Type == null || !Collections.TryGetValue(mapping.Type, out value)) continue;
 
                     value.Load(data, mapping);
-                    PrintTool.Write("DB", $"加载完成 ({++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
-                    yield return value; // 让出：调用方（协程）可在此切回主循环
+                    PrintTool.Write("DB", $"加载完成 (用户 {++loaded}): {(mapping.Type?.Name ?? "未知类型")}");
+                    yield return null; // 让出：等价于 Unity 的「等一帧」，下一帧再加载下一张表
                 }
             }
+            PrintTool.Write("DB", $"阶段[用户表加载] 耗时 {sw.ElapsedMilliseconds}ms");
+        }
+
+        /// <summary>
+        /// 读取数据库文件全部字节。浏览器（DatabaseBytesLoader 已设置）经 HTTP 取；否则走 System.IO.File。
+        /// 返回值与 exists 语义一致：不存在时返回 null 且 exists=false。
+        /// </summary>
+        private byte[] LoadFileBytes(string path, out bool exists)
+        {
+            if (DatabaseBytesLoader != null)
+            {
+                byte[] data = DatabaseBytesLoader(path);
+                exists = data != null && data.Length > 0;
+                return data;
+            }
+
+            exists = File.Exists(path);
+            if (!exists) return null;
+
+            using FileStream fs = File.OpenRead(path);
+            using MemoryStream ms = new MemoryStream();
+            fs.CopyTo(ms);
+            return ms.ToArray();
         }
 
         public void Save(bool commit)
