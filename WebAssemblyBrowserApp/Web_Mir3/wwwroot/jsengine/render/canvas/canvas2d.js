@@ -111,13 +111,16 @@ export const drawLabel = (handle, w, h, text, fontCss, foreArgb, outlineArgb, fo
 
     c.font = fontCss;
     c.textBaseline = 'top';
+    const fs = parseInt((fontCss.match(/(\d+)(px|pt)/) || [])[1] || 12);
+    // 行高用字体真实度量（em 盒 ascent+descent），而非写死的 fs*1.3。
+    // GDI+ TextRenderer 居中基于字体 tmHeight（≈1.1×fs），用 1.3×fs 会把整块文字顶上去导致偏上。
+    const _fm = c.measureText('Mg');
+    const lineHeight = Math.max(1, Math.round((_fm.fontBoundingBoxAscent || fs) + (_fm.fontBoundingBoxDescent || fs * 0.3)));
     const horizontalCenter = (format & 1) !== 0;
     const right = (format & 2) !== 0;
     const verticalCenter = (format & 4) !== 0;
     const bottom = (format & 8) !== 0;
     const wordBreak = (format & 16) !== 0;
-    const fs = parseInt((fontCss.match(/(\d+)(px|pt)/) || [])[1] || 12);
-    const lineHeight = fs * 1.3;
     const pad = 1;
 
     const lines = wordBreak ? wrapLines(c, text, Math.max(1, w - pad * 2)) : (text || '').split('\n');
@@ -127,6 +130,9 @@ export const drawLabel = (handle, w, h, text, fontCss, foreArgb, outlineArgb, fo
     if (verticalCenter) startY = Math.max(0, (h - totalHeight) / 2);
     else if (bottom) startY = Math.max(0, h - totalHeight);
     else startY = 0;
+    // GDI+ TextRenderer 在字形上方保留 internal leading（MS Sans Serif 比 Tahoma 多），
+    // 用 Tahoma 兜底后字形会整体偏上。下移约 0.1×字号补偿，贴近原版竖直位置（bottom 对齐不挪，避免裁切）。
+    if (!bottom) startY += Math.max(1, Math.round(fs * 0.1));
 
     const ox = outlineArgb >= 0 ? 1 : 0;
     const oy = outlineArgb >= 0 ? 1 : 0;
@@ -174,9 +180,13 @@ export const drawTextBox = (handle, w, h, text, fontCss, foreArgb, backArgb, sel
     c.font = fontCss;
     c.textBaseline = 'top';
     const fs = parseInt((fontCss.match(/(\d+)(px|pt)/) || [])[1] || 12);
-    const lineHeight = fs * 1.3;
+    // 同 drawLabel：用字体真实度量算行高，避免垂直居中偏上。
+    const _fm = c.measureText('Mg');
+    const lineHeight = Math.max(1, Math.round((_fm.fontBoundingBoxAscent || fs) + (_fm.fontBoundingBoxDescent || fs * 0.3)));
     const padX = 1;
     const top = verticalCenter ? Math.max(0, (h - lineHeight) / 2) : 0;
+    // 同上：补偿 internal leading，文字下移约 0.1×字号贴近 GDI+ 竖直位置。
+    top += Math.max(1, Math.round(fs * 0.1));
     const xOf = (i) => padX + c.measureText(text.substring(0, i)).width;
 
     if (selLength > 0 && selBackArgb >= 0) {

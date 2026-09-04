@@ -33,7 +33,15 @@ public class Font : IDisposable
     {
         string weight = Bold ? "bold " : string.Empty;
         string slant = Italic ? "italic " : string.Empty;
-        return $"{weight}{slant}{Size}px {Name}";
+        // 浏览器没有 "MS Sans Serif"，其度量最接近的继任者是 Tahoma（同设计师、字形度量几乎一致），
+        // 用它可在 H5 上还原原版竖直度量。其余字体名原样保留，统一加引号并补通用 fallback，
+        // 避免无效 CSS（未引号的带空格字体名会被拆成多个不识别的 family）导致静默退回浏览器默认字体。
+        string family;
+        if (string.Equals(Name, "MS Sans Serif", StringComparison.OrdinalIgnoreCase))
+            family = "Tahoma, 'Microsoft YaHei', sans-serif";
+        else
+            family = $"'{Name}', sans-serif";
+        return $"{weight}{slant}{Size}px {family}";
     }
 
     public void Dispose()
