@@ -503,7 +503,7 @@ namespace Client.Envir
 
                 Loading = false;
                 Loaded = true;
-                // Console.WriteLine($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
+                PrintTool.Log($"[WS-DIAG] CEnvir.LoadDatabase: COMPLETED, Loaded=true");
             }
             catch (Exception ex)
             {
