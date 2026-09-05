@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="Web_Mir3/Web_Mir3.csproj" />
+  <Project Path="Web_Mir3_BLazor/Web_Mir3_BLazor.csproj" Id="7b56cdb7-fc42-4844-9e9a-b819d6083ca0" />
 </Solution>

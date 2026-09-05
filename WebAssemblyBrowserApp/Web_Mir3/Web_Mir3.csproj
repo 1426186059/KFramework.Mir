@@ -5,6 +5,8 @@
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RunAotCompilation>false</RunAotCompilation>
+	 <GeneratePublishCompressedStaticWebAssets>false</GeneratePublishCompressedStaticWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
